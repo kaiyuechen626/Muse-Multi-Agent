@@ -1,0 +1,28 @@
+Muse Multi-Agent — unofficial desktop experiment for Muse Cyrene use cases
+Prepared and modified: 2026-10-21
+Maintained for publication by GitHub user kaiyuechen626.
+
+This project's application and adapter source is offered under the GNU General
+Public License, version 3 or (at your option) any later version. See LICENSE.
+There is NO WARRANTY, to the extent permitted by applicable law.
+Original and third-party rights are retained; no exclusive authorship of
+inherited material is claimed. This notice does not relicense third-party code.
+
+Project lineage / acknowledgements:
+- Muse: https://github.com/Zer0Qing/Muse
+  Copyright (C) 2026 Mozi. GPL-3.0-or-later.
+  Android reference baseline: v2.6.1,
+  commit d7ce76b9640e42afcb571fa3813c9bcf0779969c.
+- Muse Cyrene: https://github.com/kaiyuechen626/Muse-Cyrene
+  An unofficial Android derivative; this is a separate desktop source package.
+- Muse's historical NOTICE acknowledges openhanako memory components under
+  Apache-2.0. Its full notice is retained in licenses/Muse-v2.6.1-NOTICE.txt
+  as upstream reference, not as a list of desktop dependencies.
+
+The desktop uses Node.js, local web UI, local role/chat/memory JSON storage,
+Muse-format import, DeepSeek requests and an experimental DSH adapter.
+This is not an official Muse, Muse Cyrene upstream, or DeepSeek release.
+See docs/PROVENANCE.md and THIRD_PARTY_NOTICES.md for scope and dependencies.
+
+The archive does not contain the Android application, DSH runtime, Node runtime,
+models, personal voices, chat data, API keys or imported character artwork.

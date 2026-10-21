@@ -1,0 +1,11 @@
+{
+  "name": "dsh-plugin-muse-multi-agent",
+  "version": "0.3.3-alpha.1",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "main": "index.mjs",
+  "files": ["index.mjs", "scope-adapter.mjs", "connection.mjs", "bridge.mjs", "client.js", "cordis.patch.yml", "LICENSE", "NOTICE", "README.md", "licenses/"],
+  "exports": {".":"./index.mjs","./client":"./client.js","./package.json":"./package.json","./cordis.patch.yml":"./cordis.patch.yml"},
+  "dsh": {"bundle":{"patch":"./cordis.patch.yml"},"client":{"inject":["@deepseek-ai/dsh-client-ui-sidebar"],"platform":"web"}},
+  "description": "Muse embedded panel, session pairing, per-role grants and scoped DSH tool dispatch"
+}

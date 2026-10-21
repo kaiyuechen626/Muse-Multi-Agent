@@ -1,0 +1,15 @@
+data/
+.env
+node_modules/
+.env.*
+!.env.example
+verification/
+backups/
+*.log
+*.tgz
+*.zip
+*.dpapi
+.DS_Store
+Thumbs.db
+
+dist/

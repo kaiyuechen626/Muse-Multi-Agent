@@ -1,0 +1,3 @@
+- insert:
+    - id: muse-multi-agent
+      name: dsh-plugin-muse-multi-agent

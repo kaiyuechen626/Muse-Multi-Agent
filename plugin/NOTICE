@@ -1,0 +1,20 @@
+Muse DSH adapter — 0.3.3-alpha.1
+Prepared and modified: 2026-10-21
+Part of Muse Multi-Agent, an unofficial desktop experiment for Muse Cyrene use cases.
+
+This adapter source is provided under GPL-3.0-or-later, without warranty.
+See LICENSE for conditions on modification and redistribution.
+Original and third-party rights remain with their respective holders.
+
+Muse reference: https://github.com/Zer0Qing/Muse
+Copyright (C) 2026 Mozi; GPL-3.0-or-later.
+Cyrene: https://github.com/kaiyuechen626/Muse-Cyrene
+Historical upstream NOTICE: licenses/Muse-v2.6.1-NOTICE.txt.
+This historical notice is not a list of adapter dependencies.
+
+The adapter calls @deepseek-ai/dsh-tools (tested 0.2.0-rc.2) and uses DSH's
+Cordis services (tested 4.0.4). Their MIT notices are retained in licenses/.
+Client React is provided by the DSH host; React source is not bundled.
+No DSH host runtime, other plugins, user data, keys or model weights are included.
+See README.md for installation, experimental limitations and host requirements.
+No endorsement by the Muse authors or DeepSeek is claimed.
