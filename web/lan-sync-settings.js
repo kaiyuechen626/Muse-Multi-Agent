@@ -1,0 +1,29 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+export function installLanSyncSettings({api,settings}){
+ const button=document.createElement('button');button.type='button';button.textContent='手机与电脑局域网同步';settings.querySelector('.modelSettings').append(button);
+ const prompt=document.createElement('dialog');prompt.setAttribute('aria-label','发现同名 AI');document.body.append(prompt);const dismissed=new Set();let shown='';
+ const originalApi=api;api=async(...args)=>{const result=await originalApi(...args);if(args[0]==='lan-sync'){showMatches(result);window.dispatchEvent(new CustomEvent('muse-role-aliases',{detail:result.roleMerges||[]}));}return result;};
+ const dialog=document.createElement('dialog');dialog.innerHTML=`<div class="dialogHead"><h2>手机与电脑局域网同步</h2><button class="close">关闭</button></div><p>首次选择扫码或 USB 配对，在手机确认后，同一局域网内自动同步角色、聊天和记忆。API 密钥、DSH 权限和语音模型留在各自设备。</p><div class="actions"><button class="qr">扫码配对</button><button class="usb">USB 配对</button><button class="refresh">刷新状态</button><button class="stop">暂停局域网同步</button></div><p role="status"></p><div class="pair"></div><div class="devices"></div><p class="conflicts"></p><button class="export">导出冲突副本</button><p>扫码时两端需在同一 Wi-Fi；USB 首次配对需要 Android USB 调试并由手机允许此电脑。同步传输经过加密。离线修改会在重连后合并；同一内容的冲突保留两份供核对，不静默覆盖。</p>`;document.body.append(dialog);const $=s=>dialog.querySelector(s);let working=false,timer;
+ const run=fn=>async()=>{if(working)return;working=true;for(const root of [dialog,prompt])root.querySelectorAll('button').forEach(b=>b.disabled=true);try{await fn();}catch(e){$('[role=status]').textContent=e.message;let error=prompt.querySelector('[role=alert]');if(!error){error=document.createElement('p');error.setAttribute('role','alert');prompt.append(error);}error.textContent=e.message;}finally{working=false;for(const root of [dialog,prompt])root.querySelectorAll('button').forEach(b=>b.disabled=false);}};
+ function matchCard(match){
+  const box=document.createElement('section'),title=document.createElement('h3'),note=document.createElement('p'),details=document.createElement('details'),summary=document.createElement('summary'),preview=document.createElement('pre');
+  title.textContent=`发现同名 AI：${match.name}`;note.textContent=`${match.deviceName}中的角色（${match.sourceId.slice(0,8)}）与电脑角色（${match.targetId.slice(0,8)}）同名。要合并为一个 AI 吗？合并后汇总聊天和记忆，以电脑设定为主；不同设定保留副本，手机原角色保留停用备份。密钥、模型服务配置和 DSH 授权不跨设备合并。`;
+  summary.textContent='核对双方设定';preview.textContent=`另一台设备：\n${match.sourcePreview||'（无设定）'}\n\n电脑：\n${match.targetPreview||'（无设定）'}`;preview.style.whiteSpace='pre-wrap';details.append(summary,preview);box.append(title,note,details);
+  for(const [label,merge] of [['合并',true],['分别保留',false]]){const answer=document.createElement('button');answer.type='button';answer.textContent=label;answer.onclick=run(async()=>{await api('lan-sync/name-match','POST',{id:match.id,merge});prompt.close();shown='';await refresh();});box.append(answer);}return box;
+ }
+ function showMatches(state){
+  let area=dialog.querySelector('.nameMatches');if(!area){area=document.createElement('div');area.className='nameMatches';$('.devices').before(area);}area.replaceChildren(...(state.nameMatches||[]).map(matchCard));
+  if(shown&&!(state.nameMatches||[]).some(m=>m.id===shown)){prompt.close();shown='';}
+  const next=(state.nameMatches||[]).find(m=>!dismissed.has(m.id));if(next&&!prompt.open&&!document.querySelector('dialog[open]')){shown=next.id;const later=document.createElement('button');later.textContent='稍后处理';later.onclick=()=>{dismissed.add(shown);prompt.close();shown='';};prompt.replaceChildren(matchCard(next),later);prompt.showModal();}
+ }
+ prompt.addEventListener('cancel',()=>{dismissed.add(shown);shown='';});
+ async function refresh(){const state=await api('lan-sync');$('[role=status]').textContent=state.listening?`局域网同步已开启 · ${state.addresses.join(' / ')}:${state.port}${state.error?' · '+state.error:''}`:'局域网同步已暂停';$('.devices').replaceChildren();for(const d of state.devices){const box=document.createElement('p'),revoke=document.createElement('button');box.append(document.createTextNode(`${d.name} · ${d.lastSync?'最近同步 '+new Date(d.lastSync).toLocaleString():'已配对，等待同步'} `));revoke.textContent='解除配对';revoke.onclick=run(async()=>{await api('lan-sync/revoke','POST',{deviceId:d.id});await refresh();});box.append(revoke);$('.devices').append(box);}$('.conflicts').textContent=state.conflicts.length?`有 ${state.conflicts.length} 处冲突，两份内容已保留。可导出后核对。`:'没有待核对的同步冲突。';}
+ button.onclick=run(async()=>{dialog.showModal();await refresh();clearInterval(timer);timer=setInterval(()=>{if(!working)refresh().catch(()=>{});},5000);});
+ $('.close').onclick=()=>dialog.close();dialog.addEventListener('close',()=>{clearInterval(timer);$('.pair').replaceChildren();});
+ $('.qr').onclick=run(async()=>{const pair=await api('lan-sync/pairing','POST',{}),qr=window.qrcode(0,'M');qr.addData(pair.uri);qr.make();const img=document.createElement('img');img.src=qr.createDataURL(5,16);img.alt='用手机 Muse Cyrene 扫描此配对二维码';img.style.maxWidth='100%';const note=document.createElement('p');note.textContent='请在手机 Muse Cyrene → 数据与备份 → 局域网同步中扫码，并确认配对。二维码 3 分钟有效，只能使用一次。';$('.pair').replaceChildren(img,note);await refresh();});
+ $('.usb').onclick=run(async()=>{$('.pair').replaceChildren();const r=await api('lan-sync/usb','POST',{});await refresh();$('[role=status]').textContent=r.message;});
+ $('.refresh').onclick=run(refresh);$('.stop').onclick=run(async()=>{await api('lan-sync/stop','POST',{});$('.pair').replaceChildren();await refresh();});
+ $('.export').onclick=run(async()=>{const data=await api('lan-sync/conflicts'),url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'})),link=document.createElement('a');link.href=url;link.download='Muse-同步冲突副本.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});
+ setInterval(()=>{if(!document.hidden&&!working)api('lan-sync').catch(()=>{});},7000);
+ api('lan-sync').catch(()=>{});
+}

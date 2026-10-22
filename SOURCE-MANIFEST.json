@@ -1,6 +1,16 @@
 {
-  "version": "0.1.0-alpha.1",
+  "version": "0.3.0-lan.2",
   "files": [
+    {
+      "path": ".gitattributes",
+      "bytes": 82,
+      "sha256": "820823ddb4ef694ce8759b35ef06cbe2c13cc2316d1997766fb8e2c99f879c9c"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "bytes": 384,
+      "sha256": "98644ab240ad2e467eb15e6bbe6678728ee9c6108f3a58b81d04ad222ad33add"
+    },
     {
       "path": ".gitignore",
       "bytes": 123,
@@ -8,13 +18,18 @@
     },
     {
       "path": "CHANGELOG.md",
-      "bytes": 565,
-      "sha256": "59ce3a57508f5447df0d26f233833a7b0baf658e252f4968b9a0a33a87e75337"
+      "bytes": 2438,
+      "sha256": "53886ce2221f71c583fc87b9b635041376eac13a255178724dd06207bcff5b99"
+    },
+    {
+      "path": "docs/LAN_SYNC.md",
+      "bytes": 4205,
+      "sha256": "5210e13cc9d5139de2f4161ef7c7011a1695a902127a2948609bf125bd53ae1a"
     },
     {
       "path": "docs/LIMITATIONS.md",
-      "bytes": 1476,
-      "sha256": "6edd4ba90867525688dd197a2c7245bfff10ccb53e71e4544e65847458289912"
+      "bytes": 1947,
+      "sha256": "d6cbac8f9a4f66c6ae3777301063993adebd8a93c60237bae82e8708aba77b50"
     },
     {
       "path": "docs/PROVENANCE.md",
@@ -23,8 +38,8 @@
     },
     {
       "path": "docs/VALIDATION.md",
-      "bytes": 1354,
-      "sha256": "24d3422dd3950a6c5714a51bf671409c6e1486c2579f1353142ec0c4a111fea9"
+      "bytes": 1191,
+      "sha256": "dc6723dcff365d0b04ff677bfcc0cbcf762755db7843125b08b983d84312868c"
     },
     {
       "path": "LICENSE",
@@ -47,24 +62,29 @@
       "sha256": "7061ec5bc6f6898b1e9979db24ce33a89004838c217ceb8d7bafd9fba5a7e939"
     },
     {
+      "path": "licenses/QR-Code-Generator-MIT.txt",
+      "bytes": 1097,
+      "sha256": "b64b51eff958f0a9d87df78a68672ebe4832e2b9142b93f9ff57d4e505ba1d33"
+    },
+    {
       "path": "NOTICE",
       "bytes": 1569,
       "sha256": "370cb37fac03dee82dafcac2a4f410950083c007bcb0dbf5f8b2f6a63b491e16"
     },
     {
       "path": "package.json",
-      "bytes": 444,
-      "sha256": "85b4162b5210cfd7f784a373de04f56e0522e5c29d5ca3b05febf6cd8020721f"
+      "bytes": 442,
+      "sha256": "792b81ca3dfd0306bbbba9f013dfccd09b93a958ae5adef11ad4beb2148a350c"
     },
     {
       "path": "plugin/bridge.mjs",
-      "bytes": 4747,
-      "sha256": "32e6a98f9f64babe01d2445b1a4f108036136deb99bfb60b5fc6d05c8bfab211"
+      "bytes": 5187,
+      "sha256": "5348f4eb892b8141330dc5797666dbf56e964e814c4f05cb01e386b83579957f"
     },
     {
       "path": "plugin/client.js",
-      "bytes": 4221,
-      "sha256": "adb65578105b2feefc7975c34306ee3066a44fbfd924260904e000cc9b53d472"
+      "bytes": 5422,
+      "sha256": "6603f0886090bcb2b5ac25dcabe2083624be92a2c0b49ab1879ba79aa94282d5"
     },
     {
       "path": "plugin/connection.mjs",
@@ -78,8 +98,8 @@
     },
     {
       "path": "plugin/index.mjs",
-      "bytes": 1458,
-      "sha256": "7d439beb89637446c2c273cd3e760d8f4821dcf0dfd838ac66bde40b92e02670"
+      "bytes": 1564,
+      "sha256": "d1b39968db023ded54326059be2f0d4499905a53bad265f428d8334e4407cda4"
     },
     {
       "path": "plugin/LICENSE",
@@ -108,13 +128,13 @@
     },
     {
       "path": "plugin/package.json",
-      "bytes": 675,
-      "sha256": "ce087a568b7743f9c474337ad3740e95e89c1ca0931fcacbfa2f80b1de9c38a0"
+      "bytes": 726,
+      "sha256": "cdb3ed1332eea3b795ca93d5e3783caeac559932d8f089f22e3e2f4f43ebb5a4"
     },
     {
       "path": "plugin/README.md",
-      "bytes": 3621,
-      "sha256": "3d4889c4225c538a0aeb9d8ffef1b62d3aa5bd008f460b6ee38c2b9f791bc935"
+      "bytes": 5882,
+      "sha256": "11620d62a20ef0e8c3c561c486c927f80b273e313f10a4bdeda95a9077dfc95a"
     },
     {
       "path": "plugin/scope-adapter.mjs",
@@ -122,24 +142,44 @@
       "sha256": "696b51e647361999b04ae972ee73d187f92bd827bfc5e4d9c613a5d20ba7653c"
     },
     {
+      "path": "plugin/wallpaper-client-hook.js",
+      "bytes": 5204,
+      "sha256": "502ff7712c33811757fef07c9f38f6a00c4cd216bfae9420fea95a2328fa0546"
+    },
+    {
+      "path": "plugin/wallpaper-tools.mjs",
+      "bytes": 5414,
+      "sha256": "eab25c99da9daf6c8f9b6a556664595eedcd38ddc0af4e909601bb1e6434e9e9"
+    },
+    {
       "path": "README.md",
-      "bytes": 3762,
-      "sha256": "7424a5ab0c6277786dce6a154ba67d2672bdc01689a2185d22704e7d0fd75a21"
+      "bytes": 4730,
+      "sha256": "4e59bb06f40f6bbd8a81ac49cbc8dffc0ffd481bdb6a5d45550061e70a7226e2"
     },
     {
       "path": "RELEASE_NOTES.md",
-      "bytes": 1381,
-      "sha256": "59c2c645f5554fec76cdebd7ba29f66643de7959c4736f05a67c379d6a99328c"
+      "bytes": 2350,
+      "sha256": "9f079ee96fe3e62573e23179f1c8975f9b76f5b77ae1d8ccb10bbf22179caaa9"
+    },
+    {
+      "path": "scripts/install-wallpaper-adapter.mjs",
+      "bytes": 2653,
+      "sha256": "2f56511fc7323693a60238c45e2effe8115074fad3e94991ea3b42ef31a54731"
     },
     {
       "path": "scripts/prepare-release.mjs",
-      "bytes": 2299,
-      "sha256": "d2ae87d8031b864770e09b6039519ae9a8dd289f14f2ba164bc80884ca2d7e3b"
+      "bytes": 2368,
+      "sha256": "fbb0c7ce23c536ba74bd83a0ec2ae41875aa23080642733ad6b0ad384e6d6bed"
     },
     {
       "path": "scripts/verify-install.mjs",
       "bytes": 2480,
       "sha256": "c9f7408de6b0e8f6b359f0b07a7885275cf307bf35985a3aac2462a22e302da7"
+    },
+    {
+      "path": "src/api-key.mjs",
+      "bytes": 415,
+      "sha256": "d583c16d89a29f6e2c41f395746649f9a9e97fcc68221fafcd6c04265172a817"
     },
     {
       "path": "src/automatic-memory.mjs",
@@ -173,18 +213,33 @@
     },
     {
       "path": "src/dsh-connection.mjs",
-      "bytes": 2523,
-      "sha256": "78bd109418cb631ac7cf310235e5e9844d2e963f4a1c758be85120cd44bf97e3"
+      "bytes": 3043,
+      "sha256": "4f2c2df9621bbd19ff61cff714eb0c4713351b837e38a7f4b21e04542286f215"
     },
     {
       "path": "src/full-backup.mjs",
-      "bytes": 8034,
-      "sha256": "0d62baaf8e2f6aa3fef0400851221be6ba2d2e01886d245d024599cfe76eb736"
+      "bytes": 8297,
+      "sha256": "21178fb124011ea7ba095be0d2dadf33d555940ce88fa9e27b1f80e8d7f3e6ae"
     },
     {
       "path": "src/key-vault.mjs",
-      "bytes": 2863,
-      "sha256": "fa5cc23d7f35c379c321d750bb96f06c66497b7f8aeda4dc2278d7940a3c4d22"
+      "bytes": 2843,
+      "sha256": "cadfec2f394cabe920a0105f9f2a1d1afd2b98117cae5168897f99a221317c8a"
+    },
+    {
+      "path": "src/lan-sync-codec.mjs",
+      "bytes": 2567,
+      "sha256": "55bb815a11c94d587cdbd197e8ae1f61ca272c42d184c98402ec0ad4e393a429"
+    },
+    {
+      "path": "src/lan-sync-identities.mjs",
+      "bytes": 9089,
+      "sha256": "7f0994f6a71016f434423db8fba9a628b676ac1ec062bc0fbd89fcecdde4361e"
+    },
+    {
+      "path": "src/lan-sync.mjs",
+      "bytes": 14926,
+      "sha256": "c43e3967cb5aab8a5ad03c6c2a70c6b7dab39dd166c89cc99f8bea57bf62910e"
     },
     {
       "path": "src/memory-retrieval.mjs",
@@ -208,8 +263,8 @@
     },
     {
       "path": "src/provider.mjs",
-      "bytes": 4187,
-      "sha256": "c8af5a548c40fa990c1bd299308ba78233842cd123bf0b2b5e941cfd8cf98056"
+      "bytes": 4174,
+      "sha256": "b9a1c7e6747a7d5f57412d2403523dcdaef6be2cf096a2f270d6e72a832bfa9b"
     },
     {
       "path": "src/reply-versions.mjs",
@@ -218,8 +273,8 @@
     },
     {
       "path": "src/server.mjs",
-      "bytes": 36608,
-      "sha256": "720a577721dfdb338257569e928d2eced84b88373118245a6f7805f8869ef634"
+      "bytes": 38454,
+      "sha256": "3979487ef7c95bc85a88210e201649bee846455f923b37af04d9391a461b9c9d"
     },
     {
       "path": "src/store.mjs",
@@ -228,13 +283,18 @@
     },
     {
       "path": "src/tool-completion.mjs",
-      "bytes": 3173,
-      "sha256": "7b1d3fdb0da49f0c8c6645fe5be81f94e688c92f0746ba334820ae256bc89780"
+      "bytes": 3426,
+      "sha256": "50b5a71e101e1828be6cadb4429744790ca8493c894fded1c2eb377438a1d520"
     },
     {
       "path": "start-muse.cmd",
       "bytes": 150,
       "sha256": "f01eb85a3e2894497c3fdd00c0555ba1879651ae76d40c7518032bc7ef06a73a"
+    },
+    {
+      "path": "test/api-key.test.mjs",
+      "bytes": 2652,
+      "sha256": "88eb1d45e821683ddb0d78cbc4713e74609d9eae7c11c4977dccd74aca903ead"
     },
     {
       "path": "test/automatic-memory.test.mjs",
@@ -282,9 +342,14 @@
       "sha256": "0ac1a49571991dc900844cb28e6dfd7ee45f08864d0c103c6de9ae290e4c170e"
     },
     {
+      "path": "test/dsh-auto-tools.test.mjs",
+      "bytes": 4773,
+      "sha256": "1181d661a284abdfc35cdb9391c5e91231ee9d64c9af59b4d24ff8d8ceefe0b3"
+    },
+    {
       "path": "test/dsh-bridge.test.mjs",
-      "bytes": 4315,
-      "sha256": "72c78213e1e2c71125d8d28c5cf0cb1ebdb232ebd2b91f7517ab23f3dcfb48cf"
+      "bytes": 4695,
+      "sha256": "457fac33308733277c3f319b5444706262eddbc40b0f9857b2b1621488183f59"
     },
     {
       "path": "test/dsh-connection.test.mjs",
@@ -295,6 +360,11 @@
       "path": "test/dsh-embed.test.mjs",
       "bytes": 1163,
       "sha256": "fad71d753bd900fa6bd47b9a3b1e1598779158ff3985f238a3bee4cc0310503c"
+    },
+    {
+      "path": "test/dsh-pair-message.test.mjs",
+      "bytes": 3177,
+      "sha256": "3915f9ee75eb7029cacbee5109027cde02c2efc907faf2c382b0d792e204759f"
     },
     {
       "path": "test/favorites.test.mjs",
@@ -310,6 +380,16 @@
       "path": "test/key-vault.test.mjs",
       "bytes": 2557,
       "sha256": "65a92b69ac664775d158f5c2675aef6a6da2bc9e13e91529b0b4672d58a54375"
+    },
+    {
+      "path": "test/lan-sync-identities.test.mjs",
+      "bytes": 8782,
+      "sha256": "8dab701ac696b63bc307544ef62d09e109bb5b2a8785503b0573cb49bbadd494"
+    },
+    {
+      "path": "test/lan-sync.test.mjs",
+      "bytes": 5782,
+      "sha256": "be5b607e0c9169b64c93ecadfa5ffab0c2c99c155b5c36bfadfb21426ca4d395"
     },
     {
       "path": "test/memory-retrieval.test.mjs",
@@ -377,24 +457,34 @@
       "sha256": "a3fa620f0030f4579c9b8aa955038b701933dfb0b0e28da96ecd7182ac669332"
     },
     {
+      "path": "test/wallpaper-tools.test.mjs",
+      "bytes": 5973,
+      "sha256": "dab59afdabaa2217eff0867216ded4c9c98e44208cfe0e4cc2706acfbc3ea782"
+    },
+    {
       "path": "THIRD_PARTY_NOTICES.md",
-      "bytes": 1816,
-      "sha256": "5d18004d59cbbeb8c7cc959b3e69a2aca4cabb923dd4599ed2a05a93ab9cfcb0"
+      "bytes": 2004,
+      "sha256": "55a28da2886af108da6d4095552fa1ab9a997c04f7b4abbf14b6b3348116eac3"
     },
     {
       "path": "web/app.js",
-      "bytes": 92031,
-      "sha256": "36fd23aa51b3b53539929299d58b3bf7a17e684998a15d3622265fdfd2d8c605"
+      "bytes": 93214,
+      "sha256": "3e9bf46879daec1fe9d4c5188642c774c09b0afc2afbd865eaded083cd4a74de"
     },
     {
       "path": "web/dsh-settings.js",
-      "bytes": 4171,
-      "sha256": "9d3730f90c9ebbcbe22a5760e565faeb9bedc1bfab7a5642159b694a1f855425"
+      "bytes": 8055,
+      "sha256": "678c3bad769b085c281f2ce2ac30d3926589ab9b4b85bd83bff81808e0342ed4"
     },
     {
       "path": "web/index.html",
-      "bytes": 10071,
-      "sha256": "7d141658d1929ff637d69f643d3173358212f54141390fed09db6e3dfda69143"
+      "bytes": 10113,
+      "sha256": "5315f4d1615f7e849807bd32d44b32c013529958437dc9cad7c050627ca74694"
+    },
+    {
+      "path": "web/lan-sync-settings.js",
+      "bytes": 6775,
+      "sha256": "23958aa84f694d94e5507efd8c3fd8ed3116c6bff72aba01e1d5d05d88397e88"
     },
     {
       "path": "web/message-format.js",
@@ -410,6 +500,11 @@
       "path": "web/style.css",
       "bytes": 15626,
       "sha256": "cf422f2cedacdbaf3578f3baac781eba5c0373f3c88dd1b63ed892cf242bd64b"
+    },
+    {
+      "path": "web/vendor/qrcode.js",
+      "bytes": 56694,
+      "sha256": "18ae399f81182bc9de916e9c77b195df20cc58d6f2d55a62b085a299f1bf1780"
     }
   ]
 }

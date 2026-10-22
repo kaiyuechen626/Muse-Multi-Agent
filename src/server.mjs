@@ -12,11 +12,13 @@ import { chatSummary,exportChat,importChat } from './chat-management.mjs';
 import { extractMemory,appendAutomaticMemory } from './automatic-memory.mjs';
 import { reviewMemories,mergeReviewedMemories } from './memory-review.mjs';
 import { KeyVault } from './key-vault.mjs';
+import { assertApiKey } from './api-key.mjs';
 import {generateSummary,summaryHistory,needsSummary,validSummary} from './chat-summary.mjs';
 import {exportFullBackup,previewFullBackup,restoreFullBackup} from './full-backup.mjs';
 import {addReplyVersion,selectReplyVersion} from './reply-versions.mjs';
 import {DshConnection} from './dsh-connection.mjs';
 import {completeWithTools} from './tool-completion.mjs';
+import {LanSync} from './lan-sync.mjs';
 const web = new URL('../web/',import.meta.url);
 export async function createApp({dataDir=fileURLToPath(new URL('../data/',import.meta.url)), provider=complete,memoryExtractor=provider===complete?extractMemory:null}={}) {
   const store = new Store(dataDir); await store.init();
@@ -25,6 +27,7 @@ export async function createApp({dataDir=fileURLToPath(new URL('../data/',import
   const keyVault=new KeyVault(dataDir);let remembered=false,keyWarning='',settingsBusy=false;
   let connectionTesting=false;
   try{const saved=await keyVault.load();if(saved){apiKey=saved;remembered=true;}}catch(e){keyWarning=e.message;}
+  if(apiKey)try{assertApiKey(apiKey);}catch(e){apiKey='';keyWarning=e.message;}
   const memoryWrites=new Set(),chatImports=new Set();
   const automaticJobs=new Map(),automaticState=new Map();
   const roleChanges=new Set();
@@ -60,6 +63,7 @@ export async function createApp({dataDir=fileURLToPath(new URL('../data/',import
     });
     automaticJobs.set(roleId,job);
   }
+  const lanSync=new LanSync({store,canSync:()=>!backupBusy&&!activeApi&&!busy.size&&!automaticJobs.size&&!memoryWrites.size&&!roleChanges.size});await lanSync.init();
   const server = http.createServer(async (req,res) => {
     let tracked=false;
     const json = (code,value) => {
@@ -73,6 +77,7 @@ export async function createApp({dataDir=fileURLToPath(new URL('../data/',import
       const url = new URL(req.url,`http://${host}`), path = url.pathname;
       if (!path.startsWith('/api/')) {
         const files = {'/LICENSE':['../LICENSE','text/plain'],'/NOTICE':['../NOTICE','text/plain'],'/':['index.html','text/html'],'/app.js':['app.js','text/javascript'],'/dsh-settings.js':['dsh-settings.js','text/javascript'],'/png-card.js':['png-card.js','text/javascript'],'/message-format.js':['message-format.js','text/javascript'],'/style.css':['style.css','text/css']};
+        files['/lan-sync-settings.js']=['lan-sync-settings.js','text/javascript'];files['/qrcode.js']=['vendor/qrcode.js','text/javascript'];
         if(req.method !== 'GET' || !files[path]) return json(404,{error:'未找到'});
         const ancestors=path==='/'&&url.searchParams.get('embed')==='dsh'?"dsh-app://app":"'none'";
         res.writeHead(200,{'Content-Type':`${files[path][1]}; charset=utf-8`,'Content-Security-Policy':`default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; frame-ancestors ${ancestors}`,'X-Content-Type-Options':'nosniff'});
@@ -80,6 +85,7 @@ export async function createApp({dataDir=fileURLToPath(new URL('../data/',import
       }
       let body = {};
       if(path==='/api/health'&&req.method==='GET')return json(200,{app:'muse-multi-agent',schemaVersion:1});
+      if((lanSync.syncing||lanSync.hasPendingIdentityMerge())&&req.method!=='GET')return json(409,{error:'正在合并或恢复局域网同步数据，请稍后重试'});
       if(backupBusy)return json(409,{error:'正在处理完整备份，请稍后重试'});
       activeApi++;tracked=true;
       if(path==='/api/import/muse'&&req.method==='POST'){
@@ -95,14 +101,22 @@ export async function createApp({dataDir=fileURLToPath(new URL('../data/',import
         try { body = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { return json(400,{error:'无效 JSON'}); }
         if (!body || typeof body !== 'object' || Array.isArray(body)) return json(400,{error:'请求必须为 JSON 对象'});
       }
+      if(path==='/api/lan-sync'&&req.method==='GET')return json(200,lanSync.status());
+      if(path==='/api/lan-sync/start'&&req.method==='POST')return json(200,await lanSync.start());
+      if(path==='/api/lan-sync/stop'&&req.method==='POST')return json(200,await lanSync.disable());
+      if(path==='/api/lan-sync/pairing'&&req.method==='POST')return json(200,await lanSync.createPairing('qr'));
+      if(path==='/api/lan-sync/usb'&&req.method==='POST')return json(200,await lanSync.usbPair());
+      if(path==='/api/lan-sync/revoke'&&req.method==='POST')return json(200,await lanSync.revoke(body.deviceId));
+      if(path==='/api/lan-sync/conflicts'&&req.method==='GET')return json(200,{conflicts:lanSync.state.conflicts});
+      if(path==='/api/lan-sync/name-match'&&req.method==='POST')return json(200,await lanSync.resolveNameMatch(body.id,body.merge,()=>activeApi===1&&!backupBusy&&!busy.size&&!automaticJobs.size&&!memoryWrites.size&&!roleChanges.size));
       if(path==='/api/dsh'&&req.method==='GET')return json(200,{paired:!!dsh.token,grants:Object.fromEntries(dsh.grants)});
       if(path==='/api/dsh/pair'&&req.method==='POST')return json(200,await dsh.pair(body.code));
       if(path==='/api/dsh/revoke'&&req.method==='POST'){await dsh.revoke();return json(200,{ok:true});}
       if(path==='/api/dsh/catalog'&&req.method==='GET')return json(200,await dsh.catalog());
       if(path==='/api/dsh/grant'&&req.method==='POST'){
         if(!await activeRole(body.roleId))throw Error('角色不存在');
-        if(typeof body.agentId!=='string'||!Array.isArray(body.tools)||body.tools.length>64||body.tools.some(t=>typeof t!=='string'))throw Error('工具授权无效');
-        await dsh.grant(body.roleId,body.agentId,body.tools);return json(200,{ok:true});
+        if(typeof body.agentId!=='string'||!Array.isArray(body.tools)||body.tools.length>64||body.tools.some(t=>typeof t!=='string')||body.allTools!==undefined&&typeof body.allTools!=='boolean')throw Error('工具授权无效');
+        await dsh.grant(body.roleId,body.agentId,body.tools,body.allTools===true);return json(200,{ok:true});
       }
       if(path==='/api/backup'){
         if(!['GET','POST'].includes(req.method))return json(405,{error:'不支持的方法'});
@@ -117,7 +131,7 @@ export async function createApp({dataDir=fileURLToPath(new URL('../data/',import
       }
       if(path==='/api/settings/test'&&req.method==='POST'){
         if(connectionTesting)return json(409,{error:'连接测试正在进行'});
-        if(!apiKey)return json(400,{error:'请先保存 API Key，再测试连接'});
+        if(!apiKey)return json(400,{error:keyWarning||'请先保存 API Key，再测试连接'});
         connectionTesting=true;const started=Date.now();
         try{
           await provider({name:'连接测试',model:'deepseek-chat',temperature:0,maxTokens:8},[{role:'user',content:'Reply OK.'}],apiKey,{signal:AbortSignal.timeout(30000)});
@@ -133,6 +147,7 @@ export async function createApp({dataDir=fileURLToPath(new URL('../data/',import
             else{
               if(typeof body.apiKey!=='string'||body.apiKey.length>512||/[\r\n]/.test(body.apiKey)||('remember' in body&&typeof body.remember!=='boolean'))throw new Error('无效 API Key 设置');
               const next=body.apiKey.trim()||(body.keepCurrent===true?apiKey:'');
+              if(next)assertApiKey(next);
               if(body.remember===true){if(!next)throw new Error('请先填写 API Key');await keyVault.save(next);}
               else await keyVault.clear();
               apiKey=next;remembered=body.remember===true;keyWarning='';
@@ -413,7 +428,7 @@ export async function createApp({dataDir=fileURLToPath(new URL('../data/',import
             const toolSchemas=await dsh.tools(role.id),onDelta=streaming?delta=>{partial+=delta;event({type:'delta',content:delta});}:undefined;
             const userMessageId=contextChat.messages.findLast(m=>m.role==='user')?.id;
             if(toolSchemas.length&&(chat.toolRuns||[]).some(r=>r.userMessageId===userMessageId))throw Error('这条消息已有工具执行记录。为避免重复操作，请先在 DSH 核对结果，再发送新的消息。');
-            const answer=toolSchemas.length?await completeWithTools({...role,memoryContext:snapshot.prompt},history,apiKey,{tools:toolSchemas,signal:controller.signal,onDelta,
+            const answer=toolSchemas.length?await completeWithTools({...role,memoryContext:snapshot.prompt},history,apiKey,{tools:toolSchemas,refreshTools:()=>dsh.tools(role.id),signal:controller.signal,onDelta,
               invoke:async(callId,tool,args)=>{if(!await activeRole(role.id))throw Error('角色不可用');return dsh.invoke(role.id,chat.id,callId,tool,args,controller.signal);},
               record:async entry=>{chat.toolRuns??=[];const row={...entry,userMessageId,roleId:role.id,chatId:chat.id},i=chat.toolRuns.findIndex(r=>r.id===entry.id);if(i<0)chat.toolRuns.push(row);else chat.toolRuns[i]=row;await store.put('chats',chat);if(streaming)event({type:'tool',tool:entry.tool,status:entry.status});}
             }):await provider({...role,memoryContext:snapshot.prompt},history,apiKey,{signal:controller.signal,onDelta});
@@ -439,8 +454,9 @@ export async function createApp({dataDir=fileURLToPath(new URL('../data/',import
     } catch(e) { json(400,{error:e.code ? '本地数据操作失败，请检查目录权限或文件完整性' : e.message}); }
     finally{if(tracked)activeApi--;}
   });
+  server.on('close',()=>{lanSync.stop().catch(()=>{});});
   return server;
 }
 if(process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
-  const server=await createApp(); server.listen(Number(process.env.PORT || 3210),'127.0.0.1',() => console.log(`Muse v0.1.0 http://127.0.0.1:${server.address().port}`));
+  const server=await createApp(); server.listen(Number(process.env.PORT || 3210),'127.0.0.1',() => console.log(`Muse v0.3.0-lan.2 http://127.0.0.1:${server.address().port}`));
 }

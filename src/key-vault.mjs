@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process';
 import { mkdir,readFile,writeFile,rename,unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { assertApiKey } from './api-key.mjs';
 
 // Send secret bytes over stdin, never as a command argument or temporary plaintext file.
 function dpapi(value,decrypt=false){
@@ -25,9 +26,10 @@ export class KeyVault{
   async load(){
     let ciphertext;try{ciphertext=await readFile(this.path);}catch(e){if(e.code==='ENOENT')return '';throw new Error('无法读取已保存密钥');}
     const key=(await dpapi(ciphertext,true)).toString('utf8');
-    if(!key||key.length>512||/[\r\n]/.test(key))throw new Error('已保存密钥无效，请重新配置');return key;
+    return assertApiKey(key);
   }
   async save(key){
+    assertApiKey(key);
     const encrypted=await dpapi(Buffer.from(key,'utf8'));
     await mkdir(this.directory,{recursive:true});const temp=this.path+'.'+randomUUID()+'.tmp';
     try{await writeFile(temp,encrypted,{flag:'wx'});await rename(temp,this.path);}finally{await unlink(temp).catch(e=>{if(e.code!=='ENOENT')throw e;});}

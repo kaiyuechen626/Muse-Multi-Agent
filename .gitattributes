@@ -1,0 +1,2 @@
+# Release manifests hash the exact shipped bytes, including line endings.
+* -text

@@ -2,6 +2,7 @@
 import { parsePngCard, pngAvatar } from './png-card.js';
 import { formatMessage } from './message-format.js';
 import {installDshSettings} from './dsh-settings.js';
+import {installLanSyncSettings} from './lan-sync-settings.js';
 const $=s=>document.querySelector(s);
 const themeKey='muse:theme:v1',systemTheme=matchMedia('(prefers-color-scheme: dark)');
 let themeMode='light';try{const saved=localStorage.getItem(themeKey);if(['light','dark','system'].includes(saved))themeMode=saved;}catch{}
@@ -654,6 +655,7 @@ const generalSettings=document.createElement('dialog');generalSettings.id='gener
 generalSettings.innerHTML='<div class="dialogHead"><h2 id="generalSettingsTitle">设置</h2><button type="button" class="closeSettings">关闭</button></div><section class="settingsSection"><h3>聊天</h3><div class="sendPreference"></div><p class="muted">默认 Enter 发送，Shift+Enter 换行。修改后自动保存在当前浏览器。</p></section><section class="settingsSection"><h3>模型连接</h3><div class="modelSettings"></div></section><section class="settingsSection"><h3>数据与备份</h3><div class="backupSettings"></div><p class="muted">完整备份包含角色、聊天和记忆；聊天备份用于单独恢复一段聊天。</p></section>';
 document.body.append(generalSettings);
 installDshSettings({api,settings:generalSettings,getRoles:()=>roles,getChat:()=>chat});
+installLanSyncSettings({api,settings:generalSettings});
 const appearance=document.createElement('section');appearance.className='settingsSection';
 const appearanceTitle=document.createElement('h3');appearanceTitle.textContent='外观';
 const themeLabel=document.createElement('label');themeLabel.textContent='主题 ';
@@ -717,7 +719,7 @@ const testHint=document.createElement('p');testHint.className='muted';testHint.t
 testConnection.onclick=async()=>{if(savingSettings)return;settingsSaving(true);$('#settingsError').textContent='正在测试 DeepSeek，最多等待约 30 秒…';try{const result=await api('settings/test','POST',{});$('#settingsError').textContent=`连接成功 · ${result.model} · ${(result.elapsedMs/1000).toFixed(1)} 秒`;}catch(e){$('#settingsError').textContent=e.message;}finally{settingsSaving(false);}};
 let savingSettings=false;
 $('#settings').onclick=guarded(async()=>{const s=await api('settings');$('#apiKey').value='';rememberKey.checked=s.remembered;rememberKey.disabled=!s.secureStorageSupported;$('#settingsError').textContent=s.warning||'';$('#config').showModal();});
-async function keyStatus(){const s=await api('settings');$('#keyStatus').textContent=s.configured?(s.remembered?'● API Key 已配置 · 本机加密保存':'● API Key 已配置 · 本次运行'):'○ 尚未配置 API Key';}
+async function keyStatus(){const s=await api('settings');$('#keyStatus').textContent=s.warning|| (s.configured?(s.remembered?'● API Key 已配置 · 本机加密保存':'● API Key 已配置 · 本次运行'):'○ 尚未配置 API Key');}
 function settingsSaving(value){savingSettings=value;$('#settingsForm').querySelectorAll('button,input').forEach(el=>el.disabled=value);}
 $('#config').addEventListener('cancel',e=>{if(savingSettings)e.preventDefault();});
 $('#settingsForm').onsubmit=async e=>{e.preventDefault();if(savingSettings)return;settingsSaving(true);try{await api('settings','PUT',{apiKey:$('#apiKey').value,remember:rememberKey.checked,keepCurrent:true});$('#apiKey').value='';$('#config').close();await keyStatus();notice('模型设置已更新');}catch(e){$('#settingsError').textContent=e.message;}finally{settingsSaving(false);}};
@@ -761,3 +763,22 @@ await guarded(async()=>{
   }else if(previous?.startsWith('role:')&&roles.some(r=>r.id===previous.slice(5))){selected=previous.slice(5);render();}
   await keyStatus();if($('#message').value)notice('已恢复未发送的草稿');
 })();
+window.addEventListener('muse-role-aliases',event=>{
+  if(sending||editing||document.querySelector('dialog[open]'))return;
+  const alias=event.detail.find(m=>m.from===selected);if(!alias)return;
+  selected=alias.to;
+  guarded(async()=>{if(chat){chat=await api(`chats/${chat.id}`);selected=chat.characterId;}await refresh();saveDraft();notice('同名角色已合并，聊天和记忆已归入同一角色。');})();
+});
+let lanRevision=null,lanRefreshing=false;
+setInterval(async()=>{
+  if(lanRefreshing||document.hidden||sending||editing||document.querySelector('dialog[open]')||$('#message').value)return;
+  lanRefreshing=true;
+  try{
+    const state=await api('lan-sync');
+    if(lanRevision!==null&&state.revision!==lanRevision){
+      const id=chat?.id,updated=id?await api(`chats/${id}`).catch(()=>null):null;
+      if(!sending&&chat?.id===id&&!document.querySelector('dialog[open]')){if(id){chat=updated;if(chat)selected=chat.characterId;}await refresh();}
+    }
+    lanRevision=state.revision;
+  }catch{}finally{lanRefreshing=false;}
+},7000);

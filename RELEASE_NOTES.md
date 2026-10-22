@@ -1,13 +1,25 @@
-# Muse Multi-Agent v0.1.0-alpha.1
+# Muse Multi-Agent 0.3.0-lan.2
 
-面向 Muse Cyrene 使用场景的非官方电脑端实验项目。感谢原 Muse 作者 Mozi 及贡献者。本项目与上游 Muse、DeepSeek 无官方隶属或背书关系。
+面向 Muse Cyrene 使用场景的非官方电脑端预发布版。与上游 Muse、DeepSeek 无官方隶属或背书关系。感谢 Muse 作者 Mozi 与贡献者，保留 GPL-3.0-or-later、LICENSE、NOTICE 和第三方声明。
 
-这是需要 Node.js 24 的源码预发布版，不是独立 EXE。解压源码包后运行 npm start，或 Windows 双击 start-muse.cmd；打开 http://127.0.0.1:3210/，自行配置 DeepSeek Key。基础应用无需安装 npm 依赖。
+## 新功能
 
-包含角色卡导入、单角色聊天、流式回复与停止、消息版本和分支、搜索收藏、本地记忆、备份恢复及设置。DSH 插件为可选实验附件，安装方法见 plugin/README.md；基础聊天不要求 DSH。
+- 配套 Muse Cyrene 0.3.0-lan.2：首次选择二维码或 USB 配对，之后在同一局域网自动同步角色、文字聊天和事实记忆。
+- 同名但身份不同的 AI 先询问“合并”或“分别保留”。任一端作答，另一端沿用；分别保留记住选择。
+- 确认合并后统一角色身份、汇总聊天和记忆。电脑已有设定优先，差异保留副本，合并前保存原始备份；重复请求与中断恢复不会重复创建资料。
+- 可选 DSH 插件 0.3.6-alpha.1：逐角色授权使用当前及以后注册的会话工具，保留宿主审批与作用域；未注册模型工具的界面插件仍需适配。
+- 修正无效 API Key 被误报为网络连接失败的问题。
 
-尚未提供手机实时同步、多角色群聊。真实 DeepSeek 工具往返与全新 DSH 安装仍待验收。自动记忆全量测试曾出现一次等待超时，复查通过但根因未确认，详见 docs/VALIDATION.md。不要把 Alpha 当作稳定版或直接暴露到公网。
+## 使用
 
-代码采用 GPL-3.0-or-later，附 LICENSE、NOTICE、来源和第三方材料。附件不包含 API Key、个人角色/聊天/记忆、语音模型、音色或 DSH 运行库。
+下载源码 ZIP，解压到可写目录，安装 Node.js 24+，Windows 双击 `start-muse.cmd`，其他系统在源码目录运行 `npm start`。访问 http://127.0.0.1:3210/ 并填写自己的模型密钥。基础应用无 npm 外部依赖。
 
-建议上传附件：Muse-Multi-Agent-0.1.0-alpha.1-source.zip、dsh-plugin-muse-multi-agent-0.3.3-alpha.1.tgz、SHA256SUMS.txt。本文件是可复制的发行说明草稿，不表示已经创建 GitHub Release。
+DSH 附件为可选插件，安装说明在 `plugin/README.md`。USB 配对需自行安装 Android Platform Tools，配置 PATH 或 MUSE_ADB_PATH；扫码不需要 ADB。升级前导出完整备份，使用新目录启动并恢复自己的备份。DSH 授权重启后需重新配对。
+
+## 验证与范围
+
+Windows / Node.js 24：81 项自动回归与干净目录安装检查通过；同名提示浏览器验证通过。配套手机真机 5 项隔离测试及 1 项 Wi-Fi 直连测试通过。没有声称全新 DSH、全部第三方插件、全部系统或全应用测试通过。
+
+这是本机网页应用源码发行版，不是独立 EXE。多角色群聊尚未实现；仅同步可移植文字资料，不跨端同步附件、API 密钥、DSH 授权或本地语音模型。后台同步受 Android 调度与网络隔离影响。具体范围见 docs/LAN_SYNC.md 和 docs/LIMITATIONS.md。
+
+源码与插件附件不包含个人角色、聊天、配对凭据、私钥、模型、音色或 DSH 运行库。本版为预发布，安装与已知范围以本说明和配套文档为准。

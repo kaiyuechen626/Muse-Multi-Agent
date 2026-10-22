@@ -2,7 +2,9 @@
 
 **面向 Muse Cyrene 使用场景的非官方电脑端实验项目。**
 
-版本：0.1.0-alpha.1。与原 Muse 作者、DeepSeek 均无官方隶属或背书关系。感谢 [Muse](https://github.com/Zer0Qing/Muse) 作者 Mozi 及贡献者；关联手机项目为 [Muse Cyrene](https://github.com/kaiyuechen626/Muse-Cyrene)。本项目采用 GPL-3.0-or-later，保留适用原作者声明，详见 LICENSE、NOTICE 和 [来源记录](docs/PROVENANCE.md)。
+版本：0.3.0-lan.2（配套局域网同步预发布版）。与原 Muse 作者、DeepSeek 均无官方隶属或背书关系。感谢 [Muse](https://github.com/Zer0Qing/Muse) 作者 Mozi 及贡献者；关联手机项目为 [Muse Cyrene](https://github.com/kaiyuechen626/Muse-Cyrene)。本项目采用 GPL-3.0-or-later，保留适用原作者声明，详见 LICENSE、NOTICE 和 [来源记录](docs/PROVENANCE.md)。
+
+[本版发行附件](https://github.com/kaiyuechen626/Muse-Multi-Agent/releases/tag/desktop-v0.3.0-lan.2) · [配套手机版本](https://github.com/kaiyuechen626/Muse-Cyrene/releases/tag/cyrene-v0.3.0-lan.2)
 
 ## 开始使用
 
@@ -32,7 +34,13 @@ DSH 不是基础聊天的前提。不要复制原开发者的 data 或 node_modu
 
 ## DSH 可选接入
 
-参见 [插件安装说明](plugin/README.md)。需自行安装兼容 DSH，本项目不分发其安装包或运行库。真实 DSH 工具读取已验证；真实 DeepSeek 工具往返尚未完成验收。详见 [实验功能边界](docs/LIMITATIONS.md)。手机实时同步、多角色群聊尚未实现。
+参见 [插件安装说明](plugin/README.md)。需自行安装兼容 DSH，本项目不分发其安装包或运行库。本机已验证真实 DeepSeek 选择工具、DSH 读取测试文件及结果回传。详见 [实验功能边界](docs/LIMITATIONS.md)。多角色群聊尚未实现。
+
+## 手机与电脑同步
+
+设置中选择“手机与电脑局域网同步”，支持扫码或 USB 首次配对，确认后同一局域网自动同步角色、文字聊天与记忆。遇到独立创建的同名 AI，会询问合并或分别保留；确认合并后汇总聊天与记忆，并保存原始备份及不同设定副本。需要支持此功能的 Muse Cyrene 手机版本。步骤、同步范围和后台限制见 [局域网同步说明](docs/LAN_SYNC.md)。
+
+USB 首次配对需要 Android Platform Tools。将 `adb` 加入 PATH，或在启动前设置 `MUSE_ADB_PATH` 为自己的 adb 可执行文件路径；扫码配对不需要 ADB。手机和电脑需要在能互通的同一局域网，电脑服务保持运行。
 
 ## 开发和验证
 
@@ -40,8 +48,9 @@ DSH 不是基础聊天的前提。不要复制原开发者的 data 或 node_modu
 - `npm run verify:install`：在临时空数据目录启动本包服务，核对网页、角色、备份恢复及重启持久化。
 - `npm run release:source`：按白名单生成 dist/ 下的干净源码目录和逐文件 SHA-256 清单；不会复制私人数据、依赖或开发截图。
 
-本机 Windows/Node 24 验证不代表所有设备通过。首次使用请先以测试角色验证。当前是源码 Alpha，不是独立桌面安装器，也不适合直接暴露到公网。
+本机 Windows/Node 24 验证不代表所有设备通过。首次使用请先以测试角色验证。当前是源码预发布版，不是独立桌面安装器，也不适合直接暴露到公网。
 
 ## 许可证
 
 本项目源代码以 GNU GPL 第 3 版或任何后续版本提供，不提供担保；可按许可证条件修改和再分发。第三方组件维持各自许可，见 [第三方说明](THIRD_PARTY_NOTICES.md)。发布时应保留 LICENSE、NOTICE、来源及第三方声明。打包其他运行库或资源时需更新相应分发材料。
+

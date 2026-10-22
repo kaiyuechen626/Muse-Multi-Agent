@@ -23,6 +23,10 @@ test('配对一次性、角色授权隔离、正式调度、重复调用拒绝�
   ctx.tools.execute=async input=>{input.signal.throwIfAborted();await new Promise((resolve,reject)=>input.signal.addEventListener('abort',()=>reject(Error('cancelled')),{once:true}));};
   const pending=connection.invoke('role','chat','pending','read',{},new AbortController().signal);pending.catch(()=>{});await new Promise(r=>setTimeout(r,20));
   await connection.grant('role','agent',[]);await assert.rejects(pending);await assert.rejects(connection.invoke('role','chat','next','read',{},new AbortController().signal));
+  const again=await(await post('pair-code',{}, {'X-Muse-UI':'1'})).json();
+  await connection.pair(again.code);assert.deepEqual(await connection.tools('role'),[]);
+  await connection.grant('role','agent',['read']);assert.equal((await connection.tools('role')).length,1);
+  await assert.rejects(connection.pair(again.code));assert.equal((await connection.tools('role')).length,1);
   await connection.revoke();assert.equal(connection.token,null);
  }finally{await new Promise(resolve=>server.close(resolve));}
 });

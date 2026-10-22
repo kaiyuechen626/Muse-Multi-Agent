@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { promptMessages } from './characters.mjs';
+import { assertApiKey } from './api-key.mjs';
 export function connectionError(error) {
   if (error.name === 'AbortError') return new DOMException('已停止生成', 'AbortError');
   const code = error.cause?.code || error.code;
@@ -41,7 +42,7 @@ export async function readCompletionStream(response, onDelta) {
   return {content,finishReason};
 }
 export async function complete(role,history,key,{fetchImpl=fetch,signal,onDelta}={}) {
-  if (!key) throw new Error('请先在模型设置中填写 DeepSeek API Key');
+  assertApiKey(key);
   let response;
   try { response = await fetchImpl('https://api.deepseek.com/chat/completions', {
     method:'POST', headers:{'Content-Type':'application/json',Authorization:`Bearer ${key}`},

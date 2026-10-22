@@ -15,3 +15,6 @@
 本包不包含 ML Kit、Junrar、Android 原生库、语音模型、音色包或 DSH 提取运行库。用户导入的角色卡、头像、背景、聊天和记忆不随发布包分发，其权利不由本项目授予。
 
 `licenses/Muse-v2.6.1-NOTICE.txt` 原样保留上游历史分类，不能据此断言其中各依赖均存在于电脑端，亦不把历史分类视为重新核验结论。今后如捆绑安装器、Node、DSH、字体或其他资源，应针对新增分发内容更新本清单与适用许可文件。
+
+QR Code Generator for JavaScript 1.4.4, Copyright (c) 2009 Kazuhiko Arase, MIT license. Vendored in web/vendor/qrcode.js with its original notice; used to generate local pairing codes.
+

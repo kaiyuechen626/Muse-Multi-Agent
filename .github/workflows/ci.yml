@@ -1,0 +1,14 @@
+name: Desktop checks
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  checks:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: node --test --test-concurrency=1 "test/*.test.mjs"
+      - run: node scripts/verify-install.mjs

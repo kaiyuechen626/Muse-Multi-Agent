@@ -30,22 +30,30 @@ export function installBridge(ctx){
         return send(200,{agents});
       }
       if(action==='grant'){
-        const agent=ctx.agents.get(body.agentId);if(!agent||typeof body.roleId!=='string'||!Array.isArray(body.tools)||body.tools.length>64)throw Error('角色绑定无效');
+        const agent=ctx.agents.get(body.agentId);if(!agent||typeof body.roleId!=='string'||!Array.isArray(body.tools)||body.tools.length>64||body.tools.some(n=>typeof n!=='string')||body.allTools!==undefined&&typeof body.allTools!=='boolean')throw Error('角色绑定无效');
         const schemas=ctx.tools.schemas(agent).filter(t=>!t.name.startsWith('muse_'));if(body.tools.some(n=>!schemas.some(t=>t.name===n)))throw Error('工具目录已变化');
         for(const c of calls.values())if(c.roleId===body.roleId)c.abort?.abort();
-        grants.set(body.roleId,{agent,tools:new Set(body.tools),schemas:new Map(schemas.map(t=>[t.name,JSON.stringify(t)]))});return send(200,{ok:true});
+        grants.set(body.roleId,{agent,allTools:body.allTools===true,tools:new Set(body.tools),schemas:new Map(schemas.map(t=>[t.name,JSON.stringify(t)]))});return send(200,{ok:true,allTools:body.allTools===true});
       }
       if(action==='cancel') {const c=calls.get(body.callId);if(c?.roleId===body.roleId)c.abort?.abort();return send(200,{ok:true});}
       if(action==='execute'){
         if(typeof body.callId!=='string'||body.callId.length>100||typeof body.chatId!=='string')throw Error('调用标识无效');
         if(calls.has(body.callId))return send(409,{error:'调用已经提交，不自动重复执行'});
         if(calls.size>=1000)throw Error('本次运行调用记录已满，请在任务结束后重启 DSH 并重新配对');
-        const g=grants.get(body.roleId);if(!g||ctx.agents.get(g.agent.id)!==g.agent||!g.tools.has(body.tool)||!ctx.tools.schemas(g.agent).some(t=>t.name===body.tool))return send(403,{error:'此角色未授权该工具，或 DSH 会话已关闭'});
-        if(JSON.stringify(ctx.tools.schemas(g.agent).find(t=>t.name===body.tool))!==g.schemas.get(body.tool))return send(403,{error:'工具定义已改变，请重新审核授权'});
+        const g=grants.get(body.roleId);
+        const allowed=()=>{
+          if(!g||grants.get(body.roleId)!==g||ctx.agents.get(g.agent.id)!==g.agent||typeof body.tool!=='string'||body.tool.startsWith('muse_'))return false;
+          const schema=ctx.tools.schemas(g.agent).find(t=>t.name===body.tool);
+          return !!schema&&(g.allTools||g.tools.has(body.tool)&&JSON.stringify(schema)===g.schemas.get(body.tool));
+        };
+        if(!allowed())return send(403,{error:'工具不可用、未授权、定义已改变或 DSH 会话已关闭，请刷新目录核对'});
         const abort=new AbortController(),record={roleId:body.roleId,abort};calls.set(body.callId,record);
         const disconnected=()=>{if(!res.writableEnded)abort.abort();};res.on('close',disconnected);
         try{
-          const result=await g.agent.runMaintenance(async signal=>ctx.tools.execute({agent:g.agent,callId:body.callId,name:body.tool,arguments:body.args,signal:AbortSignal.any([signal,abort.signal,AbortSignal.timeout(120000)])}));
+          const result=await g.agent.runMaintenance(async signal=>{
+            if(!allowed())throw Error('排队期间工具或授权发生变化，已取消调用');
+            return ctx.tools.execute({agent:g.agent,callId:body.callId,name:body.tool,arguments:body.args,signal:AbortSignal.any([signal,abort.signal,AbortSignal.timeout(120000)])});
+          });
           record.result=result;return send(200,{result});
         }finally{res.off('close',disconnected);delete record.abort;}
       }

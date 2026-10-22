@@ -21,6 +21,7 @@ function memoryRecord(r){
   if(r.mergedFrom)out.mergedFrom=records(r.mergedFrom).map(v=>({id:text(v.id,200),source:text(v.source||'',100),sourceId:v.sourceId==null?null:text(v.sourceId,1000)}));
   return out;
 }
+export function cleanSyncRecord(kind,value){const result=clean(kind,value),rows=kind==='chats'?result.messages:kind==='memories'?result.records:null;if(rows&&new Set(rows.map(r=>r.id)).size!==rows.length)throw Error('同步记录含重复身份');return result;}
 function clean(kind,value){
   const base={id:id(value.id)};
   if(kind==='characters')return {...character(value,{id:base.id}),createdAt:memoryTime(value.createdAt),updatedAt:memoryTime(value.updatedAt),...(value.deletedAt!==undefined?{deletedAt:memoryTime(value.deletedAt)}:{})};

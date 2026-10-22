@@ -14,14 +14,29 @@ window.__ModuleLoader__.load({id:'dsh-plugin-muse-multi-agent',factory:(require)
       React.createElement('p',{role:'status',style:{margin:'6px 0',opacity:.75}},status));
   }
   function MusePanel({close}){
+    const frame=React.useRef(null);
+    React.useEffect(()=>{
+      let active=true,pending=false;
+      const receive=async e=>{
+        if(e.source!==frame.current?.contentWindow||e.origin!=='http://127.0.0.1:3210'||e.data?.type!=='muse:pair-request'||typeof e.data.requestId!=='string'||e.data.requestId.length>100||pending)return;
+        const source=e.source,requestId=e.data.requestId;pending=true;
+        try{
+          const r=await fetch('muse-multi-agent/bridge/pair-code',{method:'POST',headers:{'Content-Type':'application/json','X-Muse-UI':'1'},body:'{}',signal:AbortSignal.timeout(3500)});
+          const data=await r.json();if(!r.ok)throw Error();
+          if(active&&source===frame.current?.contentWindow)source.postMessage({type:'muse:pair-result',requestId,code:data.code},'http://127.0.0.1:3210');
+        }catch{if(active&&source===frame.current?.contentWindow)source.postMessage({type:'muse:pair-result',requestId,error:true},'http://127.0.0.1:3210');}
+        finally{pending=false;}
+      };
+      window.addEventListener('message',receive);return()=>{active=false;window.removeEventListener('message',receive);};
+    },[]);
     const [code,setCode]=React.useState('');
     async function pairing(action){try{const r=await fetch('muse-multi-agent/bridge/'+action,{method:'POST',headers:{'Content-Type':'application/json','X-Muse-UI':'1'},body:'{}'});const d=await r.json();if(!r.ok)throw Error(d.error);setCode(d.code||'连接已撤销');}catch(e){setCode(e.message);}}
     const [status,setStatus]=React.useState('checking'),[retry,setRetry]=React.useState(0);
     React.useEffect(()=>{let active=true;fetch('muse-multi-agent/status',{signal:AbortSignal.timeout(3500)}).then(r=>r.ok?r.json():Promise.reject()).then(d=>{if(active)setStatus(d.connected?'ready':'offline');}).catch(()=>{if(active)setStatus('offline');});return()=>{active=false;};},[retry]);
     return React.createElement('section',{style:{height:'100%',minHeight:0,display:'flex',flexDirection:'column',background:'var(--dsw-alias-background-primary,#202020)'}},
       React.createElement('header',{style:{display:'flex',alignItems:'center',gap:12,padding:'10px 16px'}},React.createElement('strong',null,'Muse Multi-Agent'),React.createElement('button',{type:'button',onClick:close,style:{marginLeft:'auto'}},'返回 DSH')),
-      React.createElement('details',{style:{padding:'0 16px 8px'}},React.createElement('summary',null,'设备配对'),React.createElement('button',{onClick:()=>pairing('pair-code')},'生成配对码（2 分钟有效）'),React.createElement('button',{onClick:()=>pairing('revoke-ui')},'撤销连接'),React.createElement('input',{readOnly:true,value:code,'aria-label':'Muse 配对码',style:{width:'100%'}}),React.createElement('small',null,'复制配对码，在下方 Muse 设置 → DSH 配对与工具授权中粘贴。重启后需重新配对。')),
-      status==='ready'?React.createElement('iframe',{title:'Muse 聊天面板',src:'http://127.0.0.1:3210/?embed=dsh',allow:'clipboard-write',sandbox:'allow-scripts allow-same-origin allow-forms allow-modals allow-downloads',style:{border:0,width:'100%',flex:1,minHeight:0,background:'#202020'}}):React.createElement('div',{style:{padding:24}},React.createElement('p',{role:'status'},status==='checking'?'正在连接 Muse…':'Muse 未启动或连接失败，请先运行 start-muse.cmd。'),React.createElement('button',{type:'button',onClick:()=>{setStatus('checking');setRetry(n=>n+1);}},'重新连接')));
+      React.createElement('details',{style:{padding:'0 16px 8px'}},React.createElement('summary',null,'手动设备配对（备用）'),React.createElement('button',{onClick:()=>pairing('pair-code')},'生成配对码（2 分钟有效）'),React.createElement('button',{onClick:()=>pairing('revoke-ui')},'撤销连接'),React.createElement('input',{readOnly:true,value:code,'aria-label':'Muse 配对码',style:{width:'100%'}}),React.createElement('small',null,'下方 Muse 设置 → DSH 插件与工具中可一键连接；也可以复制配对码手动连接。重启后需重新配对。')),
+      status==='ready'?React.createElement('iframe',{ref:frame,title:'Muse 聊天面板',src:'http://127.0.0.1:3210/?embed=dsh',allow:'clipboard-write',sandbox:'allow-scripts allow-same-origin allow-forms allow-modals allow-downloads',style:{border:0,width:'100%',flex:1,minHeight:0,background:'#202020'}}):React.createElement('div',{style:{padding:24}},React.createElement('p',{role:'status'},status==='checking'?'正在连接 Muse…':'Muse 未启动或连接失败，请先运行 start-muse.cmd。'),React.createElement('button',{type:'button',onClick:()=>{setStatus('checking');setRetry(n=>n+1);}},'重新连接')));
   }
   return {inject:['slots','layout'],apply(ctx){
     ctx.slots.inject('main',()=>ctx.slots.register({name:'main',key:'muse-multi-agent',inject:()=>({close:()=>ctx.layout.selectPanel(null)})},MusePanel));

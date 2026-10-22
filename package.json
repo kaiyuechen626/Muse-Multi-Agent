@@ -1,6 +1,6 @@
 {
   "name": "muse-multi-agent",
-  "version": "0.1.0-alpha.1",
+  "version": "0.3.0-lan.2",
   "description": "面向 Muse Cyrene 使用场景的非官方电脑端实验项目",
   "license": "GPL-3.0-or-later",
   "engines": {"node": ">=24"},
