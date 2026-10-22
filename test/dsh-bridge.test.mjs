@@ -6,6 +6,22 @@ import {once} from 'node:events';
 import {installBridge} from '../plugin/bridge.mjs';
 import {DshConnection} from '../src/dsh-connection.mjs';
 import {completeWithTools} from '../src/tool-completion.mjs';
+
+test('same role tool calls are keyed by conversation and cancellation cannot cross tasks',async()=>{
+ let handler;const running=new Map(),agent={id:'agent',runMaintenance:job=>job(new AbortController().signal)};
+ const server=http.createServer((req,res)=>handler(req,res));server.listen(0,'127.0.0.1');await once(server,'listening');
+ installBridge({effect:f=>f(),webServer:{port:server.address().port,register:r=>{handler=r.handler;return()=>{};}},agents:{list:()=>[agent],get:()=>agent},tools:{schemas:()=>[{name:'read',parameters:{type:'object'}}],execute:input=>new Promise((resolve,reject)=>{running.set(input.arguments.owner,{signal:input.signal,resolve});input.signal.addEventListener('abort',()=>reject(Error('cancelled')),{once:true});})}});
+ const d=new DshConnection(),base=`http://127.0.0.1:${server.address().port}/muse-multi-agent/bridge/`;
+ try{
+  const p=await(await fetch(base+'pair-code',{method:'POST',headers:{'X-Muse-UI':'1'},body:'{}'})).json();await d.pair(p.code);await d.grant('role','agent',['read']);
+  const a=d.invoke('role','chat-a','same-call-id','read',{owner:'a'},AbortSignal.timeout(5000));a.catch(()=>{});
+  const b=d.invoke('role','chat-b','same-call-id','read',{owner:'b'},AbortSignal.timeout(5000));b.catch(()=>{});
+  for(let n=0;n<100&&running.size<2;n++)await new Promise(r=>setTimeout(r,10));assert.equal(running.size,2);
+  await d.request('cancel',{roleId:'role',chatId:'wrong-chat',callId:'same-call-id'});assert.equal(running.get('a').signal.aborted,false);
+  await d.request('cancel',{roleId:'role',chatId:'chat-a',callId:'same-call-id'});await assert.rejects(a,/cancelled/);assert.equal(running.get('b').signal.aborted,false);
+  running.get('b').resolve({text:'B only'});assert.deepEqual(await b,{text:'B only'});
+ }finally{for(const r of running.values())r.resolve({});await d.revoke();await new Promise(r=>server.close(r));}
+});
 test('配对一次性、角色授权隔离、正式调度、重复调用拒绝、撤销',async()=>{
  let handler,count=0;const agent={id:'agent',session:{meta:{title:'模拟会话'}},runMaintenance:job=>job(new AbortController().signal)};
  const server=http.createServer((req,res)=>handler(req,res));server.listen(0,'127.0.0.1');await once(server,'listening');

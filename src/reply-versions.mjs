@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import {randomUUID} from 'node:crypto';
-export function replySnapshot(message){return Object.fromEntries(['content','createdAt','finishReason','memoryTrace'].filter(k=>message[k]!==undefined).map(k=>[k,structuredClone(message[k])]));}
+export function replySnapshot(message){return Object.fromEntries(['content','createdAt','finishReason','memoryTrace','images'].filter(k=>message[k]!==undefined).map(k=>[k,structuredClone(message[k])]));}
 export function addReplyVersion(original,answer){
   const versions=original.versions?structuredClone(original.versions):[{id:randomUUID(),...replySnapshot(original)}];
   if(versions.length>=50)throw new Error('本条回复已达到 50 个版本上限，请创建新分支');

@@ -1,10 +1,17 @@
 {
   "name": "muse-multi-agent",
-  "version": "0.3.0-lan.2",
+  "version": "0.3.0-chatrooms.1",
   "description": "面向 Muse Cyrene 使用场景的非官方电脑端实验项目",
   "license": "GPL-3.0-or-later",
-  "engines": {"node": ">=24"},
+  "engines": {
+    "node": ">=24"
+  },
   "private": true,
   "type": "module",
-  "scripts": {"start": "node src/server.mjs", "test": "node --test test/*.test.mjs", "release:source": "node scripts/prepare-release.mjs", "verify:install": "node scripts/verify-install.mjs"}
+  "scripts": {
+    "start": "node src/server.mjs",
+    "test": "node --test --test-concurrency=1 test/*.test.mjs",
+    "release:source": "node scripts/prepare-release.mjs",
+    "verify:install": "node scripts/verify-install.mjs"
+  }
 }

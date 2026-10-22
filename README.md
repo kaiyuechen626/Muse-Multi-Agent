@@ -2,9 +2,9 @@
 
 **面向 Muse Cyrene 使用场景的非官方电脑端实验项目。**
 
-版本：0.3.0-lan.2（配套局域网同步预发布版）。与原 Muse 作者、DeepSeek 均无官方隶属或背书关系。感谢 [Muse](https://github.com/Zer0Qing/Muse) 作者 Mozi 及贡献者；关联手机项目为 [Muse Cyrene](https://github.com/kaiyuechen626/Muse-Cyrene)。本项目采用 GPL-3.0-or-later，保留适用原作者声明，详见 LICENSE、NOTICE 和 [来源记录](docs/PROVENANCE.md)。
+版本：0.3.0-chatrooms.1（聊天室与 QQ 接入预发布版）。与原 Muse 作者、DeepSeek 均无官方隶属或背书关系。感谢 [Muse](https://github.com/Zer0Qing/Muse) 作者 Mozi 及贡献者；关联手机项目为 [Muse Cyrene](https://github.com/kaiyuechen626/Muse-Cyrene)。本项目采用 GPL-3.0-or-later，保留适用原作者声明，详见 LICENSE、NOTICE 和 [来源记录](docs/PROVENANCE.md)。
 
-[本版发行附件](https://github.com/kaiyuechen626/Muse-Multi-Agent/releases/tag/desktop-v0.3.0-lan.2) · [配套手机版本](https://github.com/kaiyuechen626/Muse-Cyrene/releases/tag/cyrene-v0.3.0-lan.2)
+[本版下载](https://github.com/kaiyuechen626/Muse-Multi-Agent/releases/tag/desktop-v0.3.0-chatrooms.1) · [配套手机版](https://github.com/kaiyuechen626/Muse-Cyrene/releases/tag/cyrene-v0.3.0-chatrooms.1)
 
 ## 开始使用
 
@@ -22,7 +22,9 @@ DSH 不是基础聊天的前提。不要复制原开发者的 data 或 node_modu
 
 - 角色创建、编辑、回收站，Muse / SillyTavern JSON、PNG 卡片及 Muse 角色包导入。
 - 单角色聊天、流式回复和停止、消息编辑、回复版本、分支、搜索、收藏。
+- 电脑端多 AI 聊天室：2–8 个角色共聊，各自保留人格和记忆，支持全员依次回复、指定角色、发言者标识及中断续聊，见 [聊天室使用说明](docs/CHAT_ROOMS.md)。
 - 本地角色记忆、自动提取、人工编辑、质量检查、来源追溯与检索。
+- 每个 AI 独立的记忆目录、聊天原文向量检索、每日备份与 AI 整理，详见 [记忆目录说明](docs/MEMORY_LIBRARY.md)。
 - 本地聊天及完整备份恢复、深色模式、发送快捷键和侧栏折叠。
 - 可选的实验性 DSH 内嵌面板、设备配对、角色授权及工具记录。
 
@@ -34,13 +36,17 @@ DSH 不是基础聊天的前提。不要复制原开发者的 data 或 node_modu
 
 ## DSH 可选接入
 
-参见 [插件安装说明](plugin/README.md)。需自行安装兼容 DSH，本项目不分发其安装包或运行库。本机已验证真实 DeepSeek 选择工具、DSH 读取测试文件及结果回传。详见 [实验功能边界](docs/LIMITATIONS.md)。多角色群聊尚未实现。
+参见 [插件安装说明](plugin/README.md)。需自行安装兼容 DSH，本项目不分发其安装包或运行库。本机已验证真实 DeepSeek 选择工具、DSH 读取测试文件及结果回传。详见 [实验功能边界](docs/LIMITATIONS.md)。电脑端聊天室已支持多角色文字聊天，暂不调用 DSH 工具。
 
 ## 手机与电脑同步
 
 设置中选择“手机与电脑局域网同步”，支持扫码或 USB 首次配对，确认后同一局域网自动同步角色、文字聊天与记忆。遇到独立创建的同名 AI，会询问合并或分别保留；确认合并后汇总聊天与记忆，并保存原始备份及不同设定副本。需要支持此功能的 Muse Cyrene 手机版本。步骤、同步范围和后台限制见 [局域网同步说明](docs/LAN_SYNC.md)。
 
 USB 首次配对需要 Android Platform Tools。将 `adb` 加入 PATH，或在启动前设置 `MUSE_ADB_PATH` 为自己的 adb 可执行文件路径；扫码配对不需要 ADB。手机和电脑需要在能互通的同一局域网，电脑服务保持运行。
+
+## QQ 私聊接入（开发版）
+
+开发中新增 [QQ 私聊接入](docs/QQ_CHANNEL.md)：电脑端设置中绑定本机 NapCat／OneBot、AI 使用的 QQ 账号、你的 QQ 账号及 Muse 角色，支持好友文字与图片回复、离线留言补回、可选主动聊天及确认后发布空间动态，复用角色记忆与现有局域网同步。需要额外安装桥接并保持电脑运行，新用户需使用自己的账号、桥接和 API Key 验证；不会附带开发者的登录配置。
 
 ## 开发和验证
 
@@ -53,4 +59,3 @@ USB 首次配对需要 Android Platform Tools。将 `adb` 加入 PATH，或在�
 ## 许可证
 
 本项目源代码以 GNU GPL 第 3 版或任何后续版本提供，不提供担保；可按许可证条件修改和再分发。第三方组件维持各自许可，见 [第三方说明](THIRD_PARTY_NOTICES.md)。发布时应保留 LICENSE、NOTICE、来源及第三方声明。打包其他运行库或资源时需更新相应分发材料。
-

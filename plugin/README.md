@@ -1,5 +1,15 @@
 # Muse DSH 插件（可选实验组件）
 
+## 原生主聊天框
+
+0.3.8-alpha.1 新增主聊天框角色选择。在空白标准模式会话的输入框上方选择 Muse 角色并点击“在此对话”，即可直接聊天。绑定后沿用该角色人设、长期记忆和相关历史，聊天回写 Muse，并沿用现有手机同步；生成使用 DSH 当前选择的模型。更换角色请新建对话。完整提示词被固定的模式会拒绝绑定。服务异常会提示并保留 DSH 原文以便补写。
+
+## 本机自动启动
+
+插件 0.3.7-alpha.1 支持在 DSH 加载插件时后台启动 Muse。需在本机 `~/.dsh/muse-launcher.json` 配置 `enabled: true`、Muse 源码目录 `appDirectory` 和 Node.js 可执行文件绝对路径 `nodeExecutable`。本机路径不随插件分发。
+
+已运行的 Muse 会直接复用，不会重复启动；打开面板或重新连接时也会检查服务。服务独立运行，关闭 DSH 后保留，下一次打开 DSH 会复用。启动日志位于 Muse 的 `data/startup.log`。删除配置或将 `enabled` 改为 `false` 可关闭自动启动，仍可手动运行 `start-muse.cmd`。
+
 本插件以 GPL-3.0-or-later 提供，见本目录 LICENSE、NOTICE。调用的 DSH 包仍按自己的许可提供；本包不包含 DSH 或 React 代码。已验证宿主基线：DSH 0.2.0-rc.2。其他版本需重新验证接口。
 
 ## 安装
@@ -10,10 +20,10 @@
 npm pack ./plugin --pack-destination .
 ```
 
-生成 dsh-plugin-muse-multi-agent-0.3.6-alpha.1.tgz。若 DSH 提供本地插件安装入口，可使用其支持的流程安装该包。以下为已验证 desktop profile 布局的手动安装步骤；路径不存在时停止，不要猜测其他 profile：
+生成 dsh-plugin-muse-multi-agent-0.3.8-alpha.1.tgz。若 DSH 提供本地插件安装入口，可使用其支持的流程安装该包。以下为已验证 desktop profile 布局的手动安装步骤；路径不存在时停止，不要猜测其他 profile：
 
 ```powershell
-$musePackage = (Resolve-Path './dsh-plugin-muse-multi-agent-0.3.6-alpha.1.tgz').Path
+$musePackage = (Resolve-Path './dsh-plugin-muse-multi-agent-0.3.8-alpha.1.tgz').Path
 $dshProfile = Join-Path $env:USERPROFILE '.dsh/profiles/desktop'
 $dshPnpm = Join-Path $env:USERPROFILE '.dsh/dsh-runtimes/dsh-primary-runtime/dependencies/pnpm/bin/pnpm.cjs'
 if (!(Test-Path $dshPnpm) -or !(Test-Path (Join-Path $dshProfile 'package.json'))) { throw 'DSH 布局不匹配，请使用对应版本的安装方式' }

@@ -10,6 +10,7 @@ import {promisify} from 'node:util';
 import {seal,open,digest,mergeThree,proof} from './lan-sync-codec.mjs';
 import {cleanSyncRecord} from './full-backup.mjs';
 import {IdentityMerges} from './lan-sync-identities.mjs';
+import {needsTaskFork,phoneTaskFork,preserveLocalRouting} from './sync-task-isolation.mjs';
 const runFile=promisify(execFile),kinds=['characters','chats','memories'];
 const uuid=v=>typeof v==='string'&&/^[a-f0-9-]{36}$/.test(v);
 export function localAddress(ip=''){return ip==='127.0.0.1'||ip==='::1'||/^(10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.)/.test(ip.replace(/^::ffff:/,''));}
@@ -33,39 +34,67 @@ export class LanSync{
   const seen=new Set();for(const kind of kinds)for(const raw of await this.store.list(kind)){const body=cleanSyncRecord(kind,raw),key=kind+':'+body.id;seen.add(key);const old=this.state.rows[key];if(!old||digest(body)!==old.hash)this.update(kind,body.id,body);}
   for(const [key,row] of Object.entries(this.state.rows))if(!seen.has(key)&&row.body!==null)this.update(row.kind,row.id,null);
  }
- update(kind,id,body){const key=kind+':'+id,old=this.state.rows[key],history={...(old?.history||{})};if(old)history[old.revision]=old.body;const revisions=Object.keys(history).sort((a,b)=>+a-+b);while(revisions.length>12)delete history[revisions.shift()];const row={kind,id,revision:++this.state.seq,body,hash:digest(body),history};this.state.rows[key]=row;return row;}
- async apply(kind,id,body){if(body===null){const existing=await this.store.get(kind,id);if(existing)await this.store.remove(kind,id);return;}await this.store.put(kind,cleanSyncRecord(kind,body));}
+ update(kind,id,body){const key=kind+':'+id,old=this.state.rows[key],history={...(old?.history||{})};if(old)history[old.revision]=old.body;const revisions=Object.keys(history).sort((a,b)=>+a-+b);while(revisions.length>12)delete history[revisions.shift()];const row={kind,id,revision:++this.state.seq,body,hash:digest(body),history,...(old?.groupChat||body?.kind==='group'?{groupChat:true}:{})};this.state.rows[key]=row;return row;}
+ async apply(kind,id,body){if(body===null){const existing=await this.store.get(kind,id);if(existing)await this.store.remove(kind,id);return;}const clean=cleanSyncRecord(kind,body);await this.store.put(kind,kind==='chats'?preserveLocalRouting(clean,await this.store.get(kind,id)):clean);}
  async exchange(deviceId,input){
   if(!this.state.devices[deviceId])throw Error('设备配对已撤销');
   if(!this.canSync())return {busy:true,retryAfter:5000};
   if(!Array.isArray(input.changes)||input.changes.length>64||!Number.isSafeInteger(input.cursor)||input.cursor<0||input.cursor>this.state.seq)throw Error('无效同步批次');
   this.syncing=true;const startRevision=this.state.seq;try{
    await this.identities.recover();
+   if(input.groupChatVersion===1&&input.groupMemberships!==undefined){
+    if(!Array.isArray(input.groupMemberships)||input.groupMemberships.length>10000||input.groupMemberships.some(ids=>!Array.isArray(ids)||ids.length>1000||ids.some(id=>!uuid(id))))throw Error('无效聊天室成员目录');
+    this.state.devices[deviceId].groupMemberships=input.groupMemberships;
+   }
    const answers=input.nameDecisions||[];if(!Array.isArray(answers)||answers.length>64)throw Error('无效合并选择');for(const a of answers){if(!uuid(a.id))throw Error('无效合并选择');await this.identities.decide(a.id,a.merge);}
    await this.snapshot();if(this.state.seq!==startRevision)await this.save();const acks=[],device=this.state.devices[deviceId];
+   const supportsGroups=input.groupChatVersion===1,upgradeGroups=supportsGroups&&device.groupChatVersion!==1;
+   // A newly upgraded phone must receive rooms skipped by its earlier cursor.
+   const readCursor=upgradeGroups?0:input.cursor;
    const wait={acks:[],rows:[],cursor:input.cursor,hasMore:false,serverId:this.state.id,acceptedNameDecisions:answers.map(a=>a.id)};
    const directives=this.identities.directives(input,device);if(directives){await this.save();return {...wait,...directives,nameMatches:this.identities.pending()};}
    const nameMatches=await this.identities.discover(deviceId,input);if(nameMatches.length)return {...wait,nameMatches};
    for(const change of input.changes){
     if(!kinds.includes(change.kind)||!uuid(change.id)||!uuid(change.opId)||!Number.isSafeInteger(change.baseRevision)||change.baseRevision<0)throw Error('无效同步记录');
     const key=change.kind+':'+change.id,opKey=deviceId+':'+change.opId,old=this.state.rows[key],body=change.body===null?null:cleanSyncRecord(change.kind,change.body);
+    if(change.kind==='chats'){
+     const existing=await this.store.get('chats',change.id),group=old?.groupChat||existing?.kind==='group'||body?.kind==='group';
+     if(group&&!supportsGroups)throw Error('请先更新手机以同步多 AI 聊天室');
+     if(body&&((old?.groupChat||existing?.kind==='group')&&body.kind!=='group'||existing&&existing.kind!=='group'&&body.kind==='group'))throw Error('不能改变对话类型');
+     if(body?.kind==='group'&&body.participants.some(p=>this.identities.canonical(p.characterId)!==p.characterId))throw Error('聊天室角色已经合并，请更新身份映射后重试');
+    }
     if(body&&body.id!==change.id)throw Error('同步身份不一致');
     if((change.kind==='characters'||change.kind==='memories')&&this.identities.canonical(change.id)!==change.id||body&&change.kind==='chats'&&this.identities.canonical(body.characterId)!==body.characterId)throw Error('角色已经合并，请更新身份映射后重试');
     if(Buffer.byteLength(JSON.stringify(body))>7800000)throw Error('单条资料超过同步限制，请先拆分过长对话');
     const requestHash=digest({kind:change.kind,id:change.id,body,baseRevision:change.baseRevision});
     const done=this.state.operations[opKey];if(done){if(done.requestHash!==requestHash)throw Error('重复操作标识对应不同内容');const row=this.state.rows[key],ack={...done.ack};if(row?.revision===ack.revision)ack.body=row.body;else if(row&&Object.hasOwn(row.history,ack.revision))ack.body=row.history[ack.revision];else{ack.revision=row?.revision||0;ack.body=row?.body??null;}acks.push(ack);continue;}
+    const localChat=change.kind==='chats'?await this.store.get('chats',change.id):null;
+    if(change.kind==='chats'&&needsTaskFork(old?.history?.[change.baseRevision]??(old?.revision===change.baseRevision?old.body:null),old?.body,body,!!localChat?.dshNative||localChat?.entry==='qq')){
+      // Reserve a durable receipt before creating the branch. If a write fails,
+      // the same operation reuses this identity instead of creating duplicates.
+      const pending=this.state.taskForks??={};
+      const saved=pending[opKey];if(saved&&saved.requestHash!==requestHash)throw Error('重复操作标识对应不同内容');
+      const fork=cleanSyncRecord('chats',phoneTaskFork(body,saved?.id));
+      if(!saved){pending[opKey]={id:fork.id,requestHash};await this.save();}
+      if(!await this.store.get('chats',fork.id))await this.apply('chats',fork.id,fork);
+      const storedFork=cleanSyncRecord('chats',await this.store.get('chats',fork.id));
+      if(this.state.rows['chats:'+fork.id]?.hash!==digest(storedFork))this.update('chats',fork.id,storedFork);
+      const ack={opId:change.opId,kind:change.kind,id:change.id,revision:old.revision,body:old.body,conflictId:null,forkChatId:fork.id};
+      acks.push(ack);const {body:ackBody,...receipt}=ack;this.state.operations[opKey]={requestHash,ack:receipt};delete pending[opKey];await this.save();continue;
+    }
     const seed=this.identities.seed(device,input,change,old,body);let merged=seed?.body??body,conflict=null;
-    if(!seed&&old&&old.hash!==digest(body)&&old.revision!==change.baseRevision){try{if(!Object.hasOwn(old.history,change.baseRevision))throw Error();merged=mergeThree(old.history[change.baseRevision],old.body,body);}catch{conflict={id:randomUUID(),kind:change.kind,recordId:change.id,createdAt:Date.now(),deviceName:this.state.devices[deviceId].name,local:old.body,incoming:body};}}
+    if(!seed&&old&&old.hash!==digest(body)&&old.revision!==change.baseRevision){try{if(!Object.hasOwn(old.history,change.baseRevision))throw Error();merged=mergeThree(old.history[change.baseRevision],old.body,body);if(merged!==null)merged=cleanSyncRecord(change.kind,merged);}catch{conflict={id:randomUUID(),kind:change.kind,recordId:change.id,createdAt:Date.now(),deviceName:this.state.devices[deviceId].name,local:old.body,incoming:body};}}
     if(!old&&change.baseRevision!==0)throw Error('同步基线不存在');
     if(conflict)this.state.conflicts.push(conflict);
     else if(!old||digest(merged)!==old.hash){if(Buffer.byteLength(JSON.stringify(merged))>7800000)throw Error('合并后资料超过同步限制');await this.apply(change.kind,change.id,merged);this.update(change.kind,change.id,merged);}
     const row=this.state.rows[key],ack={opId:change.opId,kind:change.kind,id:change.id,revision:row?.revision||0,body:row?.body??null,conflictId:conflict?.id||null};acks.push(ack);const {body:ackBody,...receipt}=ack;this.state.operations[opKey]={requestHash,ack:receipt};
     if(seed)device.mergeBootstrap.seeded[seed.key]=true;
    }
-   const rows=[];let bytes=Buffer.byteLength(JSON.stringify(acks));for(const {history,...row} of Object.values(this.state.rows).filter(r=>r.revision>input.cursor).sort((a,b)=>a.revision-b.revision)){const size=Buffer.byteLength(JSON.stringify(row));if(size>8000000)throw Error('单条资料超过同步大小限制，请先拆分过长对话');if(rows.length>=64||bytes+size>16000000)break;rows.push(row);bytes+=size;}
+   const rows=[];let cursor=readCursor,bytes=Buffer.byteLength(JSON.stringify(acks));for(const {history,...row} of Object.values(this.state.rows).filter(r=>r.revision>readCursor).sort((a,b)=>a.revision-b.revision)){if(row.groupChat&&!supportsGroups){cursor=row.revision;continue;}const size=Buffer.byteLength(JSON.stringify(row));if(size>8000000)throw Error('单条资料超过同步大小限制，请先拆分过长对话');if(rows.length>=64||bytes+size>16000000)break;rows.push(row);bytes+=size;cursor=row.revision;}
    const operationKeys=Object.keys(this.state.operations);while(operationKeys.length>4096)delete this.state.operations[operationKeys.shift()];
    const completedBootstrap=input.completeIdentityMerge===true&&input.changes.length===0&&device.mergeBootstrap?.version===input.identityMergeVersion;if(completedBootstrap)delete device.mergeBootstrap;
-   this.state.devices[deviceId].lastSync=Date.now();if(this.state.seq!==startRevision||input.changes.length||completedBootstrap)await this.save();return {acks,rows,cursor:rows.at(-1)?.revision??input.cursor,hasMore:Object.values(this.state.rows).some(r=>r.revision>(rows.at(-1)?.revision??input.cursor)),serverId:this.state.id,conflicts:this.state.conflicts.length,nameMatches:[],acceptedNameDecisions:answers.map(a=>a.id),completedIdentityMerge:completedBootstrap};
+   if(supportsGroups)device.groupChatVersion=1;
+   this.state.devices[deviceId].lastSync=Date.now();if(this.state.seq!==startRevision||input.changes.length||completedBootstrap||upgradeGroups)await this.save();return {acks,rows,cursor,hasMore:Object.values(this.state.rows).some(r=>r.revision>cursor),groupChatVersion:1,serverId:this.state.id,conflicts:this.state.conflicts.length,nameMatches:[],acceptedNameDecisions:answers.map(a=>a.id),completedIdentityMerge:completedBootstrap};
   }finally{this.syncing=false;}
  }
  async handle(req,res){

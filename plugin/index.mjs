@@ -3,15 +3,22 @@ import { defineTool } from '@deepseek-ai/dsh-tools';
 import {connectionStatus} from './connection.mjs';
 import {installBridge} from './bridge.mjs';
 import {installWallpaperTools} from './wallpaper-tools.mjs';
+import {ensureMuseRunning} from './autostart.mjs';
+import {installNativeChat} from './native-chat.mjs';
 export { createDshScopeAdapter } from './scope-adapter.mjs';
 export const name = 'muse-multi-agent';
 export const inject = ['tools'];
 export function apply(ctx) {
+  const startMuse=()=>ensureMuseRunning().catch(()=>false);
+  void startMuse();
   ctx.inject(['webServer','agents'],child=>installBridge(child));
+  // inject callbacks may return disposers, not the native bridge controller.
+  ctx.inject(['webServer','agents','sessionQuery','systemPrompt'],child=>{installNativeChat(child);});
   ctx.inject(['webServer'],child=>{
     installWallpaperTools(child,defineTool);
     child.effect(()=>child.webServer.register({kind:'exact',path:'/muse-multi-agent/status',handler:async(req,res)=>{
       if(req.method!=='GET'){res.writeHead(405);return res.end();}
+      await startMuse();
       res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify(await connectionStatus()));
     }}));
   });

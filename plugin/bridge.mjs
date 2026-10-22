@@ -35,10 +35,11 @@ export function installBridge(ctx){
         for(const c of calls.values())if(c.roleId===body.roleId)c.abort?.abort();
         grants.set(body.roleId,{agent,allTools:body.allTools===true,tools:new Set(body.tools),schemas:new Map(schemas.map(t=>[t.name,JSON.stringify(t)]))});return send(200,{ok:true,allTools:body.allTools===true});
       }
-      if(action==='cancel') {const c=calls.get(body.callId);if(c?.roleId===body.roleId)c.abort?.abort();return send(200,{ok:true});}
+      if(action==='cancel') {const c=calls.get(JSON.stringify([body.roleId,body.chatId,body.callId]));if(c?.roleId===body.roleId&&c.chatId===body.chatId)c.abort?.abort();return send(200,{ok:true});}
       if(action==='execute'){
         if(typeof body.callId!=='string'||body.callId.length>100||typeof body.chatId!=='string')throw Error('调用标识无效');
-        if(calls.has(body.callId))return send(409,{error:'调用已经提交，不自动重复执行'});
+        const callKey=JSON.stringify([body.roleId,body.chatId,body.callId]);
+        if(calls.has(callKey))return send(409,{error:'调用已经提交，不自动重复执行'});
         if(calls.size>=1000)throw Error('本次运行调用记录已满，请在任务结束后重启 DSH 并重新配对');
         const g=grants.get(body.roleId);
         const allowed=()=>{
@@ -47,10 +48,11 @@ export function installBridge(ctx){
           return !!schema&&(g.allTools||g.tools.has(body.tool)&&JSON.stringify(schema)===g.schemas.get(body.tool));
         };
         if(!allowed())return send(403,{error:'工具不可用、未授权、定义已改变或 DSH 会话已关闭，请刷新目录核对'});
-        const abort=new AbortController(),record={roleId:body.roleId,abort};calls.set(body.callId,record);
+        const abort=new AbortController(),record={roleId:body.roleId,chatId:body.chatId,abort};calls.set(callKey,record);
         const disconnected=()=>{if(!res.writableEnded)abort.abort();};res.on('close',disconnected);
         try{
           const result=await g.agent.runMaintenance(async signal=>{
+            abort.signal.throwIfAborted();
             if(!allowed())throw Error('排队期间工具或授权发生变化，已取消调用');
             return ctx.tools.execute({agent:g.agent,callId:body.callId,name:body.tool,arguments:body.args,signal:AbortSignal.any([signal,abort.signal,AbortSignal.timeout(120000)])});
           });

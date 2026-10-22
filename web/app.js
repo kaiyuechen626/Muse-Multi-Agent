@@ -3,6 +3,8 @@ import { parsePngCard, pngAvatar } from './png-card.js';
 import { formatMessage } from './message-format.js';
 import {installDshSettings} from './dsh-settings.js';
 import {installLanSyncSettings} from './lan-sync-settings.js';
+import {installQQSettings} from './qq-settings.js';
+import {installQQRoleBinding} from './qq-role-binding.js';
 const $=s=>document.querySelector(s);
 const themeKey='muse:theme:v1',systemTheme=matchMedia('(prefers-color-scheme: dark)');
 let themeMode='light';try{const saved=localStorage.getItem(themeKey);if(['light','dark','system'].includes(saved))themeMode=saved;}catch{}
@@ -19,7 +21,8 @@ backupDialog.querySelector('.backupDownload').onclick=async()=>{backupProgress(t
 backupDialog.querySelector('.backupFile').onchange=async e=>{fullBackup=null;backupProgress(true);const status=backupDialog.querySelector('[role=status]');backupDialog.querySelector('.backupPreview').textContent='';try{const file=e.target.files[0];if(!file){status.textContent='';return;}if(file.size>63000000)throw new Error('备份超过 63 MB 限制');status.textContent='正在校验并预览…';const data=JSON.parse((await file.text()).replace(/^\uFEFF/,''));const preview=await api('backup','POST',{backup:data,preview:true});backupDialog.querySelector('.backupPreview').textContent=backupCounts(preview.counts);const added=Object.values(preview.counts).reduce((n,v)=>n+v.added,0);fullBackup=added?data:null;status.textContent=added?'确认后补入缺失数据。':'没有缺失数据，无需恢复。';}catch(e){status.textContent=e.message;}finally{backupProgress(false);}};
 backupDialog.querySelector('.backupRestore').onclick=async()=>{if(!fullBackup||backupWorking)return;backupProgress(true);const status=backupDialog.querySelector('[role=status]');status.textContent='正在恢复…';try{const result=await api('backup','POST',{backup:fullBackup,preview:false});fullBackup=null;backupDialog.querySelector('.backupPreview').textContent=backupCounts(result.counts);status.textContent='恢复完成。';await refresh();}catch(e){status.textContent=e.message;}finally{backupProgress(false);}};
 let roles=[], chats=[], selected=null, chat=null, editing=null, draft={}, imported=null, sending=false, liveText=null;
-async function api(path,method='GET',body) { const r=await fetch(`/api/${path}`,{method,headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined}); const data=await r.json(); if(!r.ok) throw new Error(data.error); return data; }
+const entryHeader={'X-Muse-Entry':new URLSearchParams(location.search).get('embed')==='dsh'?'dsh':'web'};
+async function api(path,method='GET',body) { const r=await fetch(`/api/${path}`,{method,headers:{...entryHeader,...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined}); const data=await r.json(); if(!r.ok) throw new Error(data.error); return data; }
 function notice(s=''){ $('#notice').textContent=s; }
 const draftPrefix='muse:draft:v1:',lastContextKey='muse:last-context:v1';
 let draftContext=null,draftStorageWarning=false;
@@ -52,7 +55,10 @@ window.addEventListener('resize',resizeComposer);
 function guarded(fn){return async(...args)=>{try{await fn(...args);}catch(e){notice(e.message);}};}
 function avatar(role){const e=document.createElement(role?.avatar?'img':'div');e.className='avatar';if(role?.avatar){e.src=role.avatar;e.alt='';}else e.textContent=role?.name?.slice(0,1)||'✦';return e;}
 function messageShell(message,role,streaming=false){
-  const user=message.role==='user',name=user?'你':role?.name||chat?.characterName||'角色';
+  const user=message.role==='user';
+  if(isGroup(chat)&&message.characterId)role=roles.find(r=>r.id===message.characterId)||{name:message.characterName||chat.participants.find(p=>p.characterId===message.characterId)?.name};
+  const baseName=message.characterName||role?.name||chat?.characterName||'角色';
+  const name=user?'你':isGroup(chat)?groupDisplayName(message.characterId,baseName):baseName;
   const row=document.createElement('div');row.className=`messageRow ${message.role}`;
   const portrait=avatar(user?{name:'你'}:role||{name});portrait.classList.add('messageAvatar');portrait.setAttribute('aria-hidden','true');
   const bubble=document.createElement('div');bubble.className=`bubble ${message.role}`;
@@ -67,6 +73,47 @@ function messageShell(message,role,streaming=false){
   if(streaming){const status=document.createElement('span');status.className='generatingLabel';status.textContent='正在回复…';meta.append(status);}
   bubble.append(meta);row.append(portrait,bubble);return {row,bubble,label};
 }
+
+const isGroup=c=>c?.kind==='group';
+function groupDisplayName(id,name){return chat?.participants?.filter(p=>p.name===name||(roles.find(r=>r.id===p.characterId)?.name===name)).length>1?name+' · '+id?.slice(0,4):name;}
+const belongsTo=(c,id)=>isGroup(c)?c.participants.some(p=>p.characterId===id):c?.characterId===id;
+const groupButton=document.createElement('button');groupButton.id='newGroupChat';groupButton.type='button';groupButton.textContent='＋ 多 AI 聊天室';$('#importChat').before(groupButton);
+const groupDialog=document.createElement('dialog');groupDialog.id='groupChatDialog';groupDialog.setAttribute('aria-labelledby','groupChatTitle');
+groupDialog.innerHTML='<form><div class="dialogHead"><h2 id="groupChatTitle">创建多 AI 聊天室</h2><button type="button" class="groupClose">取消</button></div><p class="muted">选择 2–8 个角色，按勾选顺序依次发言。每个角色使用自己的设定和记忆，共享本聊天室的对话。</p><label>聊天室名称<input class="groupName" maxlength="100" placeholder="例如：午后闲聊（可选）"></label><input class="groupSearch" type="search" placeholder="搜索角色" aria-label="搜索聊天室成员"><div class="groupRoleList"></div><p class="groupCount" role="status"></p><p class="groupError" role="alert"></p><button class="primary groupCreate" type="submit" disabled>创建聊天室</button></form>';document.body.append(groupDialog);
+let groupSelection=new Set(),groupCreating=false;
+function renderGroupChoices(){
+ const visible=matchingRoles(groupDialog.querySelector('.groupSearch').value),list=groupDialog.querySelector('.groupRoleList');list.replaceChildren();
+ for(const role of visible){const label=document.createElement('label');label.className='groupChoice';const check=document.createElement('input');check.type='checkbox';check.value=role.id;check.checked=groupSelection.has(role.id);check.disabled=!check.checked&&groupSelection.size>=8;const text=document.createElement('span');text.textContent=role.name;label.append(check,avatar(role),text);check.onchange=()=>{if(check.checked)groupSelection.add(role.id);else groupSelection.delete(role.id);renderGroupChoices();};list.append(label);}
+ groupDialog.querySelector('.groupCount').textContent='已选择 '+groupSelection.size+' / 8 · '+[...groupSelection].map(id=>roles.find(r=>r.id===id)?.name).join(' → ');
+ groupDialog.querySelector('.groupCreate').disabled=groupSelection.size<2||groupCreating;
+ groupDialog.querySelector('.groupError').textContent=roles.length<2?'至少需要两个角色，请先创建或导入角色。':!visible.length?'没有匹配的角色。':'';
+}
+groupButton.onclick=guarded(async()=>{if(sending)return;roles=await api('characters');groupSelection=new Set();groupDialog.querySelector('form').reset();renderGroupChoices();groupDialog.showModal();groupDialog.querySelector('.groupName').focus();});
+groupDialog.querySelector('.groupClose').onclick=()=>{if(!groupCreating)groupDialog.close();};groupDialog.addEventListener('cancel',e=>{if(groupCreating)e.preventDefault();});
+groupDialog.querySelector('.groupSearch').oninput=renderGroupChoices;
+groupDialog.querySelector('form').onsubmit=async e=>{
+ e.preventDefault();if(groupCreating||groupSelection.size<2)return;groupCreating=true;groupDialog.querySelectorAll('input,button').forEach(el=>el.disabled=true);
+ try{const title=groupDialog.querySelector('.groupName').value.trim();chat=await api('chats','POST',{characterIds:[...groupSelection],...(title?{title}:{})});selected=chat.characterId;groupDialog.close();$('#chooseChatDialog').close();$('#chatSearch').value='';chatsExpanded=true;notice('聊天室已创建，发送消息开始聊天');await refresh();$('#message').focus();}
+ catch(error){groupDialog.querySelector('.groupError').textContent=error.message;}
+ finally{groupCreating=false;groupDialog.querySelectorAll('input,button').forEach(el=>el.disabled=false);groupDialog.querySelector('.groupCreate').disabled=groupSelection.size<2;}
+};
+const groupBar=document.createElement('section');groupBar.id='groupBar';groupBar.hidden=true;groupBar.setAttribute('aria-label','聊天室成员与发言设置');
+const groupMembers=document.createElement('div');groupMembers.className='groupMembers';
+const groupReplyLabel=document.createElement('label');groupReplyLabel.textContent='本轮发言';const groupReply=document.createElement('select');groupReply.id='groupReply';groupReply.setAttribute('aria-label','本轮发言角色');groupReplyLabel.append(groupReply);
+groupBar.append(groupMembers,groupReplyLabel);$('header').after(groupBar);
+let groupReplyChat=null;
+function renderGroupBar(running){
+ groupBar.hidden=!isGroup(chat);groupButton.disabled=running;if(!isGroup(chat))return;
+ const previous=groupReplyChat===chat.id?groupReply.value:'';groupReplyChat=chat.id;groupMembers.replaceChildren();
+ const all=document.createElement('option');all.value='';all.textContent='全员依次回复';groupReply.replaceChildren(all);
+ for(const p of chat.participants){const role=roles.find(r=>r.id===p.characterId),name=groupDisplayName(p.characterId,role?.name||p.name);
+  const chip=document.createElement('button');chip.type='button';chip.className='groupMember';chip.disabled=running||!role;chip.title=role?'查看 '+name+' 的独立记忆':'角色已删除，可在回收站恢复';chip.append(avatar(role||{name}));const label=document.createElement('span');label.textContent=name+(role?'':'（已删除）');chip.append(label);chip.onclick=guarded(async()=>{const data=await api('characters/'+p.characterId+'/memories');memoryRoleId=p.characterId;$('#memorySearch').value='';$('#memoryStatus').textContent='';memoryData(data);$('#memoryDialog').showModal();});groupMembers.append(chip);
+  const option=document.createElement('option');option.value=p.characterId;option.textContent='仅 '+name;option.disabled=!role;groupReply.append(option);
+ }
+ if([...groupReply.options].some(o=>o.value===previous&&!o.disabled))groupReply.value=previous;groupReply.disabled=running;
+}
+groupReply.onchange=()=>render();
+
 function item(text,active,fn,role){const b=document.createElement('button');b.className=`listItem ${active?'active':''}`;if(role)b.append(avatar(role));const label=document.createElement('span');label.textContent=text;b.append(label);b.onclick=guarded(fn);b.disabled=sending;return b;}
 const latestBar=document.createElement('div');latestBar.id='latestBar';
 const latestButton=document.createElement('button');latestButton.type='button';latestButton.id='latestMessage';latestButton.textContent='回到最新消息 ↓';latestButton.hidden=true;
@@ -234,7 +281,8 @@ memoryTraceItem.onclick=()=>{
   traceDialog.querySelector('.traceSummary').textContent=trace?`${new Date(trace.capturedAt).toLocaleString('zh-CN')} · 带入 ${trace.records.length} 条 · 已过期未带入 ${trace.expired} 条 · 超出长度预算未带入 ${trace.budgetSkipped} 条`:'这条消息没有记忆追踪记录（旧消息、开场白、导入或人工编辑的回复）。不能据此判断当时是否使用过记忆。';
   if(trace?.selection)traceDialog.querySelector('.traceSummary').textContent+=` · ${trace.selection==='topic'?'按当前话题检索':'未匹配话题，使用基础记忆'} · 检索未选入 ${trace.unselected} 条`;
   for(const record of trace?.records||[]){const box=document.createElement('article');box.className='memoryItem';const p=document.createElement('p');p.textContent=record.text;const meta=document.createElement('small');meta.className='muted';meta.textContent=`来源：${({local:'本地',automatic:'自动记忆',backup:'备份恢复',phone:'手机导入'})[record.source]||record.source} · 版本 ${record.revision}`+(record.selectionReason?` · ${record.selectionReason}`:'');box.append(p,meta);list.append(box);}
-  if(trace&&!trace.records.length)list.textContent='本次请求没有带入记忆库条目；聊天历史和角色设定仍可能提供上下文。';
+  if(trace?.history?.length){traceDialog.querySelector('.traceSummary').textContent+=` · 历史原文 ${trace.history.length} 处`;for(const hit of trace.history)list.append(historyResult(hit,target.roleId,traceDialog));}
+  if(trace&&!trace.records.length&&!trace.history?.length)list.textContent='本次请求没有带入记忆库条目；聊天历史和角色设定仍可能提供上下文。';
   traceDialog.showModal();
 };
 const editMessageItem=document.createElement('button'),regenerateItem=document.createElement('button');
@@ -262,8 +310,8 @@ function openMessageMenu(element,roleId,content,x,y,author){
   const index=chat?.messages.findIndex(m=>m.id===menuMessage.messageId)??-1;
   favoriteItem.textContent=chat?.messages[index]?.favoriteAt?'取消收藏':'收藏消息';favoriteItem.disabled=sending||!!chat?.generating||index<0;
   memoryTraceItem.disabled=index<0||chat.messages[index]?.role!=='assistant';
-  editMessageItem.disabled=!roleId||sending||!!chat?.generating||index<0;
-  regenerateItem.disabled=editMessageItem.disabled||chat.messages[index]?.role!=='assistant'||chat.messages[index-1]?.role!=='user';
+  editMessageItem.disabled=(!roleId&&!isGroup(chat))||sending||!!chat?.generating||index<0;
+  regenerateItem.disabled=isGroup(chat)||editMessageItem.disabled||chat.messages[index]?.role!=='assistant'||chat.messages[index-1]?.role!=='user';
   saveMemoryItem.disabled=!roleId||sending||!!chat?.generating;
   quoteMessageItem.disabled=$('#message').disabled;
   messageMenu.style.left=`${Math.max(8,Math.min(x,window.innerWidth-messageMenu.offsetWidth-8))}px`;
@@ -301,6 +349,14 @@ async function refresh(){[roles,chats]=await Promise.all([api('characters'),api(
 let searchVersion=0,searchTimer;
 let showArchived=false;
 let rolesExpanded=false,chatsExpanded=false;
+let chatListKind=readLocal('muse:chat-list-kind:v1')==='group'?'group':'single';
+const chatTabs=document.createElement('nav');chatTabs.id='chatTabs';chatTabs.setAttribute('aria-label','对话分类');
+for(const [kind,label] of [['single','单独聊天'],['group','聊天室']]){
+ const tab=document.createElement('button');tab.type='button';tab.dataset.kind=kind;tab.textContent=label;
+ tab.onclick=guarded(async()=>{if(sending||chat?.generating||kind===chatListKind)return;saveDraft();chat=null;selected=null;chatListKind=kind;writeLocal('muse:chat-list-kind:v1',kind);writeLocal(lastContextKey,null);showArchived=false;chatsExpanded=true;$('#chatSearch').value='';++searchVersion;clearTimeout(searchTimer);archiveToggle.textContent='查看已归档';archiveToggle.setAttribute('aria-pressed','false');await refresh();});chatTabs.append(tab);
+}
+groupButton.before(chatTabs);
+const singleChatButton=document.createElement('button');singleChatButton.id='newSingleChat';singleChatButton.type='button';singleChatButton.textContent='＋ 单独聊天';singleChatButton.onclick=()=>$('#newChat').click();groupButton.before(singleChatButton);
 function appendListToggle(container,total,expanded,label,toggle){
   if(total<=3)return;
   const button=document.createElement('button');button.type='button';button.className='listExpand';button.setAttribute('aria-expanded',String(expanded));button.setAttribute('aria-controls',container.id);
@@ -310,16 +366,19 @@ const archiveToggle=document.createElement('button');archiveToggle.type='button'
 archiveToggle.onclick=()=>{showArchived=!showArchived;archiveToggle.textContent=showArchived?'返回聊天列表':'查看已归档';archiveToggle.setAttribute('aria-pressed',String(showArchived));closeListMenu();renderChats();};
 $('#chatSearch').oninput=()=>{clearTimeout(searchTimer);const version=++searchVersion;searchTimer=setTimeout(guarded(async()=>{const results=await api('chats?q='+encodeURIComponent($('#chatSearch').value.trim()));if(version!==searchVersion)return;chats=results;renderChats();}),200);};
 function renderChats(){
-  const visibleChats=chats.filter(c=>!!c.archived===showArchived).sort((a,b)=>Number(!!b.pinned)-Number(!!a.pinned)||b.updatedAt-a.updatedAt);
+  for(const tab of chatTabs.children){tab.setAttribute('aria-pressed',String(tab.dataset.kind===chatListKind));tab.disabled=!!(sending||chat?.generating);}
+  groupButton.hidden=chatListKind!=='group';singleChatButton.hidden=chatListKind!=='single';singleChatButton.disabled=!!(sending||chat?.generating);
+  $('#chatSearch').placeholder=chatListKind==='group'?'搜索聊天室、成员或消息':'搜索单独聊天';
+  const visibleChats=chats.filter(c=>(isGroup(c)?'group':'single')===chatListKind&&!!c.archived===showArchived).sort((a,b)=>Number(!!b.pinned)-Number(!!a.pinned)||b.updatedAt-a.updatedAt);
   const searching=!!$('#chatSearch').value.trim(),shown=searching||chatsExpanded?visibleChats:visibleChats.slice(0,3);
   $('#chats').replaceChildren(...shown.map(c=>{
     const button=item('',chat?.id===c.id,async()=>{chat=await api(`chats/${c.id}`);selected=chat.characterId;notice();render();});button.classList.add('chatItem');button.replaceChildren();
     const name=document.createElement('strong');name.textContent=(c.pinned?'置顶 · ':'')+(c.parentChatId?'↳ ':'')+(c.title||c.characterName);
-    const detail=document.createElement('small');detail.textContent=`${c.characterName} · ${c.messageCount} 条 · ${new Date(c.updatedAt).toLocaleDateString('zh-CN')}`+(roles.some(r=>r.id===c.characterId)?'':' · 角色已删除');
+    const detail=document.createElement('small');detail.textContent=`${isGroup(c)?'聊天室 · '+c.participants.map(p=>p.name).join('、'):c.characterName} · ${c.messageCount} 条 · ${new Date(c.updatedAt).toLocaleDateString('zh-CN')}`+(isGroup(c)||roles.some(r=>r.id===c.characterId)?'':' · 角色已删除');
     button.append(name,detail);if(c.excerpt){const snippet=document.createElement('small');snippet.textContent=c.excerpt;button.append(snippet);}button.title=name.textContent;bindListMenu(button,'chat',c.id);return button;
   }));
-  if(!visibleChats.length){const p=document.createElement('p');p.className='muted';p.textContent=$('#chatSearch').value?'当前列表没有匹配的聊天':showArchived?'暂无已归档聊天':'暂无聊天';$('#chats').append(p);}
-  if(!searching)appendListToggle($('#chats'),visibleChats.length,chatsExpanded,'聊天',()=>{chatsExpanded=!chatsExpanded;renderChats();$('#chats .listExpand')?.focus();});
+  if(!visibleChats.length){const p=document.createElement('p');p.className='muted';p.textContent=$('#chatSearch').value?'当前分类没有匹配结果':showArchived?'当前分类暂无已归档记录':chatListKind==='group'?'还没有聊天室，邀请几个角色一起聊吧。':'还没有单独聊天，选一个角色开始吧。';$('#chats').append(p);}
+  if(!searching)appendListToggle($('#chats'),visibleChats.length,chatsExpanded,chatListKind==='group'?'聊天室':'单独聊天',()=>{chatsExpanded=!chatsExpanded;renderChats();$('#chats .listExpand')?.focus();});
 }
 const roleSearch=document.createElement('input');roleSearch.type='search';roleSearch.placeholder='搜索角色名称';roleSearch.setAttribute('aria-label','搜索角色');$('#roles').before(roleSearch);
 function matchingRoles(query){const term=query.trim().normalize('NFKC').toLocaleLowerCase();return roles.filter(role=>role.name.normalize('NFKC').toLocaleLowerCase().includes(term)).sort((a,b)=>Number(!!b.pinned)-Number(!!a.pinned));}
@@ -333,6 +392,7 @@ function renderRoleLibrary(){
 roleSearch.oninput=()=>{closeListMenu();renderRoleLibrary();};
 function render(){
   const list=$('#messages'),previousTop=list.scrollTop,conversation=chat?.id||selected;
+  if(conversation&&renderedConversation!==conversation){chatListKind=isGroup(chat)?'group':'single';writeLocal('muse:chat-list-kind:v1',chatListKind);}
   if(chat&&renderedConversation!==conversation){showArchived=!!chat.archived;archiveToggle.textContent=showArchived?'返回聊天列表':'查看已归档';archiveToggle.setAttribute('aria-pressed',String(showArchived));}
   const follow=renderedConversation!==conversation||list.scrollHeight-list.scrollTop-list.clientHeight<100;
   if(renderedConversation!==conversation)closeMessageSearch();
@@ -342,24 +402,30 @@ function render(){
   syncDraft();
   const running=sending||chat?.generating;
   const role=roles.find(r=>r.id===selected);
+  renderGroupBar(running);
   renderRoleLibrary();
   renderChats();
-  $('#title').textContent=role?.name||chat?.characterName||'你的故事，从这里开始';
+  $('#title').textContent=isGroup(chat)?chat.title:role?.name||chat?.characterName||'你的故事，从这里开始';
   $('#subtitle').textContent=role?`${role.model} · ${chat?'聊天已保存到本机':'准备好开启一段新对话了吗？'}`:chat?'角色已删除 · 历史聊天只读':'选择一个角色，开启属于你们的对话。';
   for(const id of ['edit','newChat','deleteRole','memories']) {$('#'+id).hidden=false;$('#'+id).disabled=running;}
+  for(const id of ['edit','deleteRole','memories'])$('#'+id).hidden=chatListKind==='group';
+  $('#newChat').textContent=chatListKind==='group'?'新聊天室':'新单独聊天';
   for(const id of ['create','import','importChat'])$('#'+id).disabled=running;
   $('#deleteChat').hidden=false;$('#deleteChat').disabled=running;
   for(const id of ['renameChat','exportJson','exportMd']){$('#'+id).hidden=false;$('#'+id).disabled=running;}
   if(chat)$('#subtitle').textContent=`${chat.title} · ${role?.model||'角色已删除，只读'} · 已本地保存`;
-  $('main').style.backgroundImage=role?.background?`url("${role.background}")`:'';
+  if(isGroup(chat))$('#subtitle').textContent=`多 AI 聊天室 · ${chat.participants.length} 位角色 · 独立人格与记忆 · 已本地保存`;
+  if(!chat&&!selected&&chatListKind==='group'){$('#title').textContent='多 AI 聊天室';$('#subtitle').textContent='邀请多个角色，各自带着人格与记忆，一起聊聊。';}
+  $('main').style.backgroundImage=!isGroup(chat)&&role?.background?`url("${role.background}")`:'';
   const messages=chat?.messages||[];
   $('#messages').replaceChildren();
-  if(!messages.length){const box=document.createElement('div');box.className='welcome';box.textContent=role?`✦ 与 ${role.name} 开启新对话`:'✦ 创建角色，开始你的故事';$('#messages').append(box);}
+  if(!messages.length){const box=document.createElement('div');box.className='welcome';box.textContent=isGroup(chat)?'✦ 成员已就位，向大家打个招呼吧':role?`✦ 与 ${role.name} 开启新对话`:chatListKind==='group'?'✦ 新建或选择一个聊天室':'✦ 创建角色，开始你的故事';$('#messages').append(box);}
   for(const m of messages){
     const {row,bubble:b,label}=messageShell(m,role);b.dataset.messageId=m.id;
     if(m.favoriteAt){const marker=document.createElement('span');marker.textContent=' ★';marker.title='已收藏';marker.setAttribute('aria-label','已收藏');label.append(marker);}
-    const text=formatMessage(m.content);b.append(text);
-    if(m.versions?.length){
+    const text=formatMessage(m.originalContent??m.content);b.append(text);
+    if(m.images?.length){const images=document.createElement('div');images.className='qqMessageImages';for(const image of m.images){if(/^data:image\/(png|jpeg|gif|webp);base64,[A-Za-z0-9+/=]+$/.test(image.dataUrl||'')){const img=document.createElement('img');img.src=image.dataUrl;img.alt=image.description||'QQ 聊天图片';img.loading='lazy';img.title=image.description||'QQ 聊天图片';images.append(img);}if(image.error){const error=document.createElement('small');error.textContent=image.error;images.append(error);}}b.append(images);}
+    if(m.versions?.length&&!isGroup(chat)){
       const controls=document.createElement('div');controls.className='replyVersions';
       const previous=document.createElement('button'),next=document.createElement('button'),count=document.createElement('span');previous.type=next.type='button';previous.textContent='‹';next.textContent='›';previous.setAttribute('aria-label','上一个回复版本');next.setAttribute('aria-label','下一个回复版本');count.textContent=`${m.activeVersion+1} / ${m.versions.length}`;
       const locked=running||m.id!==messages.at(-1)?.id;previous.disabled=locked||m.activeVersion===0;next.disabled=locked||m.activeVersion===m.versions.length-1;
@@ -371,12 +437,14 @@ function render(){
     if(status){const tip=document.createElement('small');tip.textContent=status;b.append(tip);}
     {
       b.tabIndex=0;b.setAttribute('aria-haspopup','menu');
-      b.oncontextmenu=e=>{e.preventDefault();const rect=b.getBoundingClientRect();openMessageMenu(b,role?.id,m.content,e.clientX||rect.left+16,e.clientY||rect.top+16,label.textContent);};
-      b.onkeydown=e=>{if(e.key==='ContextMenu'||e.key==='F10'&&e.shiftKey){e.preventDefault();const rect=b.getBoundingClientRect();openMessageMenu(b,role?.id,m.content,rect.left+16,rect.top+16,label.textContent);}};
+      b.oncontextmenu=e=>{e.preventDefault();const rect=b.getBoundingClientRect();openMessageMenu(b,isGroup(chat)?(m.characterId||groupReply.value||null):role?.id,m.content,e.clientX||rect.left+16,e.clientY||rect.top+16,label.textContent);};
+      b.onkeydown=e=>{if(e.key==='ContextMenu'||e.key==='F10'&&e.shiftKey){e.preventDefault();const rect=b.getBoundingClientRect();openMessageMenu(b,isGroup(chat)?(m.characterId||groupReply.value||null):role?.id,m.content,rect.left+16,rect.top+16,label.textContent);}};
     }
     $('#messages').append(row);
   }
-  const pending=messages.at(-1)?.role==='user';$('#send').disabled=running||!role||pending;$('#message').disabled=running||!role||pending;$('#retry').hidden=!pending||!role||running;$('#retry').disabled=running;
+  if(chat?.externalEntry)$('#subtitle').textContent+=' · '+chat.externalEntry.toUpperCase()+' 对话记录，点击新聊天可开始独立任务';
+  const pending=isGroup(chat)?!!chat.pendingTurn:messages.at(-1)?.role==='user',available=isGroup(chat)?chat.participants.some(p=>roles.some(r=>r.id===p.characterId)):!!role;
+  $('#send').disabled=running||!available||(!isGroup(chat)&&pending);$('#message').disabled=$('#send').disabled;$('#retry').hidden=!pending||!available||running;$('#retry').disabled=running;$('#retry').textContent=isGroup(chat)?'继续未完成回复':'重试';
   $('#stop').hidden=!running;$('#stop').disabled=!chat||!(chat.generating||liveText);
   $('#send').textContent=running?'回复中…':'发送 ↗';
   if(chat?.error)notice(chat.error);list.scrollTop=follow?list.scrollHeight:previousTop;updateLatestButton();if(!findBar.hidden)searchMessages();
@@ -384,7 +452,18 @@ function render(){
 function preview(field){const img=$(`#${field}Preview`);img.hidden=!draft[field];img.src=draft[field]||'';}
 let memoryRecords=[],memoryRoleId=null,memoryEditing=null,memorySaving=false;
 const retrievalLabel=document.createElement('label');retrievalLabel.className='autoMemoryToggle';const retrievalToggle=document.createElement('input');retrievalToggle.type='checkbox';retrievalLabel.append(retrievalToggle,document.createTextNode('按当前话题检索记忆'));$('#memoryInfo').after(retrievalLabel);
-const retrievalHelp=document.createElement('p');retrievalHelp.className='muted';retrievalHelp.textContent='默认开启，本地文字匹配，最多 12 条话题记忆＋3 条基础记忆；无匹配时最多 5 条基础记忆。关闭后按重要度和原长度预算选择。';retrievalLabel.after(retrievalHelp);
+const retrievalHelp=document.createElement('p');retrievalHelp.className='muted';retrievalHelp.textContent='默认开启：按话题选择长期记忆，并从本角色的历史聊天向量索引中找原文和前后消息。聊天时自动扩展同义表达。关闭后仅按重要度选取长期记忆。';retrievalLabel.after(retrievalHelp);
+const historySearchButton=document.createElement('button');historySearchButton.type='button';historySearchButton.textContent='检索历史记忆';retrievalHelp.after(historySearchButton);
+const historyDialog=document.createElement('dialog');historyDialog.innerHTML='<form><div class="dialogHead"><h2>检索历史记忆</h2><button type="button" class="closeHistory">关闭</button></div><label>话题或关键词<input name="query" required maxlength="3000" placeholder="例如：以前讨论的旅行计划"></label><button type="submit">查找原文</button></form><p role="status"></p><div class="historyResults"></div>';document.body.append(historyDialog);let historyRoleId;
+historyDialog.querySelector('.closeHistory').onclick=()=>historyDialog.close();
+historySearchButton.onclick=()=>{historyRoleId=memoryRoleId;historyDialog.querySelector('.historyResults').replaceChildren();historyDialog.querySelector('[role=status]').textContent='按当前角色检索，显示聊天、时间和原文位置。';historyDialog.showModal();historyDialog.querySelector('input').focus();};
+historyDialog.querySelector('form').onsubmit=async event=>{event.preventDefault();const id=historyRoleId,status=historyDialog.querySelector('[role=status]'),list=historyDialog.querySelector('.historyResults');status.textContent='正在检索…';list.replaceChildren();try{const data=await api(`characters/${id}/memory-search?q=${encodeURIComponent(historyDialog.querySelector('input').value.trim())}`);if(id!==historyRoleId)return;status.textContent=`找到 ${data.results.length} 处相关原文 · 保存于 ${data.root}`;for(const hit of data.results)list.append(historyResult(hit,id,historyDialog));}catch(error){status.textContent=error.message;}};
+function historyResult(hit,roleId,dialog){
+  const box=document.createElement('article');box.className='memoryItem';const title=document.createElement('strong');title.textContent=`${hit.title} · ${hit.createdAt?new Date(hit.createdAt).toLocaleString('zh-CN'):'时间未知'}`;const text=document.createElement('p');text.textContent=hit.text;const file=document.createElement('small');file.className='muted';file.textContent=`原文：${hit.file} · ${hit.messageId||hit.recordId}`;box.append(title,text,file);
+  if(hit.neighbors?.length){const details=document.createElement('details'),summary=document.createElement('summary');summary.textContent='前后消息';details.append(summary);for(const m of hit.neighbors){const p=document.createElement('p');p.textContent=`${m.role==='user'?'用户':'AI'}：${m.content}`;details.append(p);}box.append(details);}
+  if(hit.chatId&&!hit.legacyArchive){const open=document.createElement('button');open.type='button';open.textContent='打开来源消息';open.onclick=async()=>{try{if(sending)return;const data=await api(`chats/${hit.chatId}`);if(!belongsTo(data,roleId))throw Error('来源角色已变化');chat=data;selected=roleId;dialog.close();$('#memoryDialog').close();render();const target=[...$('#messages').querySelectorAll('[data-message-id]')].find(el=>el.dataset.messageId===hit.messageId);if(target){target.classList.add('searchCurrent');target.scrollIntoView({block:'center'});}}catch(error){notice(error.message);}};box.append(open);}
+  return box;
+}
 retrievalToggle.onchange=async()=>{const id=memoryRoleId,enabled=retrievalToggle.checked;retrievalToggle.disabled=true;try{const data=await api(`characters/${id}/memories/retrieval`,'PUT',{enabled});if(memoryRoleId===id)memoryData(data);}catch(error){retrievalToggle.checked=!enabled;$('#memoryStatus').textContent=error.message;}finally{retrievalToggle.disabled=false;}};
 const reviewMemoryButton=document.createElement('button');reviewMemoryButton.type='button';reviewMemoryButton.textContent='记忆质量检查';$('#addMemory').after(reviewMemoryButton);
 const reviewDialog=document.createElement('dialog');reviewDialog.id='memoryReviewDialog';reviewDialog.innerHTML='<div class="dialogHead"><h2>检查相似记忆</h2><button type="button">关闭</button></div><p>根据文字相似度找出候选，不代表事实相同或必然冲突。请核对人物、时间和否定词。不会自动修改记忆。</p><p class="reviewStatus" role="status"></p><div class="reviewPairs"></div>';
@@ -398,7 +477,7 @@ function sourceButton(record,roleId){
       for(const source of data.sources){const box=document.createElement('article');box.className='memoryItem';const title=document.createElement('p');title.textContent=source.unavailable?'来源聊天或消息已不存在':`${source.title}${source.inTrash?' · 在聊天回收站中':''}`;box.append(title);
         if(!source.unavailable){const text=document.createElement('p');text.textContent=source.content.slice(0,6000)+(source.content.length>6000?'\n（仅预览前 6000 字）':'');box.append(text);
           const open=document.createElement('button');open.type='button';open.textContent=source.inTrash?'请先恢复来源聊天':'打开来源消息';open.disabled=source.inTrash||sending;
-          open.onclick=async()=>{try{if(sending)return;const data=await api(`chats/${source.chatId}`);if(data.characterId!==roleId)throw Error('来源角色不匹配');chat=data;selected=data.characterId;sourceDialog.close();reviewDialog.close();$('#memoryDialog').close();notice();render();const target=[...$('#messages').querySelectorAll('[data-message-id]')].find(el=>el.dataset.messageId===source.messageId);if(target){target.classList.add('searchCurrent');target.scrollIntoView({block:'center'});}}catch(error){status.textContent=error.message;}};box.append(open);
+          open.onclick=async()=>{try{if(sending)return;const data=await api(`chats/${source.chatId}`);if(!belongsTo(data,roleId))throw Error('来源角色不匹配');chat=data;selected=data.characterId;sourceDialog.close();reviewDialog.close();$('#memoryDialog').close();notice();render();const target=[...$('#messages').querySelectorAll('[data-message-id]')].find(el=>el.dataset.messageId===source.messageId);if(target){target.classList.add('searchCurrent');target.scrollIntoView({block:'center'});}}catch(error){status.textContent=error.message;}};box.append(open);
         }rows.append(box);
       }
     }catch(error){status.textContent=error.message;}
@@ -427,7 +506,7 @@ async function loadMemoryReview(){
   }
 }
 reviewMemoryButton.onclick=async()=>{reviewRoleId=memoryRoleId;reviewDialog.showModal();try{await loadMemoryReview();}catch(e){reviewDialog.querySelector('.reviewStatus').textContent=e.message;}};
-function memoryData(data){retrievalToggle.checked=data.retrievalEnabled!==false;memoryRecords=data.records;$('#memoryInfo').textContent=`共 ${memoryRecords.length} 条记忆`+(data.sourceRoleName?` · 导入来源：${data.sourceRoleName} · 备份时间：${data.exportedAt?new Date(data.exportedAt).toLocaleString('zh-CN'):'未知'}`:' · 本地保存');showMemories();if(data.automatic)showAutomaticMemory(data.automatic);}
+function memoryData(data){$('#memoryTitle').textContent=(roles.find(r=>r.id===memoryRoleId)?.name||'当前角色')+' · 记忆管理';retrievalToggle.checked=data.retrievalEnabled!==false;memoryRecords=data.records;$('#memoryInfo').textContent=`共 ${memoryRecords.length} 条记忆`+(data.sourceRoleName?` · 导入来源：${data.sourceRoleName} · 备份时间：${data.exportedAt?new Date(data.exportedAt).toLocaleString('zh-CN'):'未知'}`:' · 本地保存');showMemories();if(data.automatic)showAutomaticMemory(data.automatic);}
 function showAutomaticMemory(state){
   $('#automaticMemory').checked=state.enabled;
   $('#automaticMemoryStatus').textContent=!state.enabled?'已关闭，不再自动保存新记忆。':state.status==='running'?'正在后台判断本轮是否有值得记住的信息…':state.status==='error'?state.error:state.status==='done'?`最近一次整理：新增 ${state.added} 条记忆。每轮额外调用一次 DeepSeek。`:'已开启：回复完成后自动整理，每轮额外调用一次 DeepSeek。';
@@ -524,7 +603,8 @@ $('#memoryForm').onsubmit=async e=>{
 $('#memorySearch').oninput=showMemories;
 $('#memoryDialog').addEventListener('click',e=>{if(e.target!==e.currentTarget)return;const r=e.currentTarget.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)e.currentTarget.close();});
 $('#memories').onclick=guarded(async()=>{const roleId=selected,data=await api(`characters/${roleId}/memories`);memoryRoleId=roleId;$('#memorySearch').value='';$('#memoryStatus').textContent='';memoryData(data);$('#memoryDialog').showModal();});
-function openEditor(role=null){editing=role?.id||null;draft={avatar:role?.avatar||'',background:role?.background||''};$('#roleForm').reset();for(const [k,v]of Object.entries(role||{})){const input=$('#roleForm').elements.namedItem(k);if(input)input.value=v;}for(const k of ['avatar','background'])preview(k);$('#editorTitle').textContent=editing?'编辑角色':imported?'导入角色预览':'创建角色';$('#formError').textContent='';$('#editor').showModal();}
+const roleQQBinding=installQQRoleBinding({api,form:$('#roleForm'),editor:$('#editor'),getRoles:()=>roles});
+function openEditor(role=null){editing=role?.id||null;draft={avatar:role?.avatar||'',background:role?.background||''};$('#roleForm').reset();for(const [k,v]of Object.entries(role||{})){const input=$('#roleForm').elements.namedItem(k);if(input)input.value=v;}for(const k of ['avatar','background'])preview(k);$('#editorTitle').textContent=editing?'编辑角色':imported?'导入角色预览':'创建角色';$('#formError').textContent='';$('#editor').showModal();roleQQBinding.load(editing);}
 $('#create').onclick=()=>{imported=null;$('#importNotice').textContent='';openEditor();};
 $('#edit').onclick=()=>{imported=null;$('#importNotice').textContent='';openEditor(roles.find(r=>r.id===selected));};
 $('#roleForm').onsubmit=async e=>{e.preventDefault();const button=e.submitter;button.disabled=true;try{const data={...Object.fromEntries(new FormData(e.target)),...draft};if(imported)data.importCard=imported;const saved=await api(editing?`characters/${editing}`:'characters',editing?'PUT':'POST',data);selected=saved.id;if(!editing)chat=null;$('#editor').close();await refresh();notice('角色已保存');}catch(e){$('#formError').textContent=e.message;}finally{button.disabled=false;}};
@@ -585,6 +665,7 @@ function renderChooseRoles(){
 }
 chooseRoleSearch.oninput=()=>{if(!choosingRole)renderChooseRoles();};
 $('#newChat').onclick=guarded(async()=>{
+  if(chatListKind==='group'){groupButton.click();return;}
   if(choosingRole)return;
   roles=await api('characters');chooseRoleSearch.value='';renderChooseRoles();
   $('#chooseChatDialog').showModal();chooseRoleSearch.focus();
@@ -600,6 +681,7 @@ async function downloadChat(format){
 $('#exportJson').onclick=guarded(()=>downloadChat('json'));$('#exportMd').onclick=guarded(()=>downloadChat('md'));
 async function send(retry=false,regenerate=null){
   if(sending||chat?.generating)return;
+  if(chat?.externalEntry){notice('请在 '+chat.externalEntry.toUpperCase()+' 继续此聊天，或点击“新聊天”与同一角色开始独立任务。');return;}
   const content=$('#message').value;if(!retry&&!regenerate&&!content.trim())return;
   sending=true;liveText=null;notice('正在等待 DeepSeek 回复…');render();
   let finished=false;
@@ -608,7 +690,7 @@ async function send(retry=false,regenerate=null){
       chat=await api('chats','POST',{characterId:selected});
       const value=$('#message').value;discardCurrentDraft();syncDraft();$('#message').value=value;saveDraft();
     }
-    const response=await fetch(`/api/chats/${chat.id}/messages`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({stream:true,...(regenerate?{regenerate:true,messageId:regenerate.messageId,updatedAt:regenerate.updatedAt}:retry?{retry:true}:{content})})});
+    const response=await fetch(`/api/chats/${chat.id}/messages`,{method:'POST',headers:{...entryHeader,'Content-Type':'application/json'},body:JSON.stringify({stream:true,...(isGroup(chat)&&groupReply.value?{replyCharacterId:groupReply.value}:{}),...(regenerate?{regenerate:true,messageId:regenerate.messageId,updatedAt:regenerate.updatedAt}:retry?{retry:true}:{content})})});
     if(!response.ok)throw new Error((await response.json()).error);
     const reader=response.body.getReader(), decoder=new TextDecoder();let buffer='';
     try { while(true){
@@ -618,10 +700,14 @@ async function send(retry=false,regenerate=null){
         const line=buffer.slice(0,end);buffer=buffer.slice(end+1);if(!line.trim())continue;
         const event=JSON.parse(line);
         if(event.type==='start'){
-          chat={...event.chat,generating:true};if(!retry&&!regenerate){$('#message').value='';saveDraft();}render();
-          const {row,bubble}=messageShell({role:'assistant',createdAt:Date.now()},roles.find(r=>r.id===chat.characterId),true);
-          liveText=document.createElement('span');bubble.append(liveText);$('#messages').append(row);
+          chat={...event.chat,generating:true,task:event.task};if(!retry&&!regenerate){$('#message').value='';saveDraft();}render();
+          if(!isGroup(chat)){const {row,bubble}=messageShell({role:'assistant',createdAt:Date.now()},roles.find(r=>r.id===chat.characterId),true);
+          liveText=document.createElement('span');bubble.append(liveText);$('#messages').append(row);}
           notice('正在等待回复，可随时停止生成…');updateLatestButton();
+        }else if(event.type==='speaker'){
+          const {row,bubble}=messageShell({role:'assistant',characterId:event.characterId,characterName:event.characterName,createdAt:Date.now()},null,true);liveText=document.createElement('span');bubble.append(liveText);$('#messages').append(row);notice(event.characterName+' 正在回复…');
+        }else if(event.type==='reply'){
+          chat={...event.chat,generating:true,task:chat?.task};liveText=null;render();
         }else if(event.type==='tool'){
           notice(`DSH 工具 ${event.tool}：${event.status==='running'?'执行中，需要审批时请到 DSH 确认':event.status==='completed'?'已返回结果':'结果未知，请核对'}`);
         }else if(event.type==='delta'){
@@ -636,7 +722,7 @@ async function send(retry=false,regenerate=null){
   }catch(e){notice(e.message);if(chat)chat=await api(`chats/${chat.id}`);}
   finally{sending=false;liveText=null;await refresh();}
 }
-$('#stop').onclick=guarded(async()=>{if(!chat)return;$('#stop').disabled=true;notice('正在停止生成…');try{await api(`chats/${chat.id}/stop`,'POST',{});}catch(e){$('#stop').disabled=false;throw e;}});
+$('#stop').onclick=guarded(async()=>{if(!chat)return;$('#stop').disabled=true;notice('正在停止生成…');try{await api(`chats/${chat.id}/stop`,'POST',{taskId:chat.task?.id});}catch(e){$('#stop').disabled=false;throw e;}});
 // A refreshed tab can still stop a request started before the refresh.
 setInterval(()=>{if(chat?.generating&&!sending)guarded(async()=>{chat=await api(`chats/${chat.id}`);render();})();},1500);
 $('#composer').onsubmit=guarded(async e=>{e.preventDefault();await send();});$('#retry').onclick=guarded(()=>send(true));
@@ -656,6 +742,7 @@ generalSettings.innerHTML='<div class="dialogHead"><h2 id="generalSettingsTitle"
 document.body.append(generalSettings);
 installDshSettings({api,settings:generalSettings,getRoles:()=>roles,getChat:()=>chat});
 installLanSyncSettings({api,settings:generalSettings});
+installQQSettings({api,settings:generalSettings});
 const appearance=document.createElement('section');appearance.className='settingsSection';
 const appearanceTitle=document.createElement('h3');appearanceTitle.textContent='外观';
 const themeLabel=document.createElement('label');themeLabel.textContent='主题 ';
@@ -727,7 +814,7 @@ clearKey.onclick=async()=>{if(savingSettings)return;settingsSaving(true);try{awa
 let chatBackup=null,chatImportBusy=false;
 $('#importChat').onclick=()=>{
   if(!roles.length){notice('请先创建或导入一个角色，再恢复聊天。');return;}
-  chatBackup=null;$('#chatImportForm').reset();$('#chatBackupInfo').textContent='';$('#chatImportError').textContent='';$('#restoreChat').disabled=true;
+  chatBackup=null;$('#chatImportForm').reset();$('#chatImportRole').disabled=false;$('#chatBackupInfo').textContent='';$('#chatImportError').textContent='';$('#restoreChat').disabled=true;
   $('#chatImportRole').replaceChildren(...roles.map(r=>{const option=document.createElement('option');option.value=r.id;option.textContent=r.name;return option;}));
   if(selected&&roles.some(r=>r.id===selected))$('#chatImportRole').value=selected;
   $('#chatImportDialog').showModal();
@@ -740,7 +827,7 @@ $('#chatBackupFile').onchange=async e=>{
     let parsed;try{parsed=JSON.parse((await file.text()).replace(/^\uFEFF/,''));}catch{throw new Error('JSON 格式无效，请选择 Muse 导出的聊天备份');}
     if(parsed?.schemaVersion!==1||!Array.isArray(parsed.messages)||typeof parsed.title!=='string')throw new Error('这不是 Muse JSON 聊天备份，请勿选择角色卡或 Markdown 文件');
     if(file!==e.target.files[0])return;
-    chatBackup=parsed;$('#chatBackupInfo').textContent=`${parsed.title} · ${parsed.messages.length} 条消息 · 原角色：${typeof parsed.characterName==='string'?parsed.characterName:'未知'}`;$('#restoreChat').disabled=false;
+    chatBackup=parsed;if(isGroup(parsed)){$('#chatImportRole').value=parsed.characterId;$('#chatImportRole').disabled=true;}else $('#chatImportRole').disabled=false;$('#chatBackupInfo').textContent=`${parsed.title} · ${parsed.messages.length} 条消息 · 原角色：${isGroup(parsed)?'聊天室 · '+parsed.participants.map(p=>p.name).join('、'):typeof parsed.characterName==='string'?parsed.characterName:'未知'}`;$('#restoreChat').disabled=false;
   }catch(error){$('#chatImportError').textContent=error.message;}
 };
 $('#chatImportForm').onsubmit=async e=>{
@@ -751,7 +838,7 @@ $('#chatImportForm').onsubmit=async e=>{
     chat=result.chat;selected=chat.characterId;$('#chatSearch').value='';++searchVersion;clearTimeout(searchTimer);
     $('#chatImportDialog').close();await refresh();notice(result.duplicate?'这份备份已导入，已打开现有聊天':'聊天已恢复，可以继续对话');
   }catch(error){$('#chatImportError').textContent=error.message;}
-  finally{chatImportBusy=false;$('#restoreChat').disabled=!chatBackup;$('#chatBackupFile').disabled=false;$('#chatImportRole').disabled=false;}
+  finally{chatImportBusy=false;$('#restoreChat').disabled=!chatBackup;$('#chatBackupFile').disabled=false;$('#chatImportRole').disabled=isGroup(chatBackup);}
 };
 $('#chatImportDialog').addEventListener('cancel',e=>{if(chatImportBusy)e.preventDefault();});
 document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>{if(b.dataset.close==='chatImportDialog'&&chatImportBusy||b.dataset.close==='memoryImportDialog'&&memoryImportBusy)return;$('#'+b.dataset.close).close();});
@@ -769,16 +856,17 @@ window.addEventListener('muse-role-aliases',event=>{
   selected=alias.to;
   guarded(async()=>{if(chat){chat=await api(`chats/${chat.id}`);selected=chat.characterId;}await refresh();saveDraft();notice('同名角色已合并，聊天和记忆已归入同一角色。');})();
 });
-let lanRevision=null,lanRefreshing=false;
+let lanRevision=null,qqRevision=null,lanRefreshing=false;
 setInterval(async()=>{
   if(lanRefreshing||document.hidden||sending||editing||document.querySelector('dialog[open]')||$('#message').value)return;
   lanRefreshing=true;
   try{
-    const state=await api('lan-sync');
-    if(lanRevision!==null&&state.revision!==lanRevision){
+    const [state,qqState]=await Promise.all([api('lan-sync'),api('qq/activity')]);
+    if(lanRevision!==null&&state.revision!==lanRevision||qqRevision!==null&&qqState.revision!==qqRevision||qqState.chatId&&!chats.some(c=>c.id===qqState.chatId)){
       const id=chat?.id,updated=id?await api(`chats/${id}`).catch(()=>null):null;
       if(!sending&&chat?.id===id&&!document.querySelector('dialog[open]')){if(id){chat=updated;if(chat)selected=chat.characterId;}await refresh();}
     }
     lanRevision=state.revision;
+    qqRevision=qqState.revision;
   }catch{}finally{lanRefreshing=false;}
 },7000);

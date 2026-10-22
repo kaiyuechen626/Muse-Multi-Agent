@@ -3,6 +3,7 @@ import {randomUUID} from 'node:crypto';
 import {mkdir,readFile,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {cleanSyncRecord} from './full-backup.mjs';
+import {hasParticipant,isGroupChat} from './group-chat.mjs';
 import {digest} from './lan-sync-codec.mjs';
 const name=v=>String(v||'').normalize('NFKC').trim().toLowerCase();
 const fields=['systemPrompt','persona','scenario','greeting','examples','postHistory','avatar','background'];
@@ -34,7 +35,11 @@ export class IdentityMerges{
   }
   for(const header of inventory){const source=incoming.get(header.id)||stored.get(header.id);if(!source||source.deletedAt!=null)continue;
    for(const target of stored.values()){if(source.id===target.id||!name(source.name)||name(source.name)!==name(target.name))continue;
-    const key=choiceKey(source.id,target.id,source.name);if(Object.hasOwn(this.s.nameChoices,key))continue;
+     const key=choiceKey(source.id,target.id,source.name);
+     if(Object.values(this.s.devices).some(d=>d.groupMemberships?.some(ids=>ids.includes(source.id)&&ids.includes(target.id)))){
+      if(this.s.nameChoices[key]!==false){this.s.nameChoices[key]=false;dirty=true;}for(const [id,r] of Object.entries(this.s.nameRequests))if(r.choiceKey===key){delete this.s.nameRequests[id];dirty=true;}continue;
+     }
+     if(Object.hasOwn(this.s.nameChoices,key))continue;
     const existing=Object.values(this.s.nameRequests).find(r=>r.choiceKey===key);
     if(existing){if(existing.sourceId===source.id&&digest(existing.sourceBody)!==digest(cleanSyncRecord('characters',source))){existing.sourceBody=cleanSyncRecord('characters',source);dirty=true;}continue;}
     const id=randomUUID();this.s.nameRequests[id]={id,choiceKey:key,name:target.name,sourceId:source.id,targetId:target.id,sourceBody:cleanSyncRecord('characters',source),targetBody:cleanSyncRecord('characters',target),deviceId,deviceName:this.s.devices[deviceId].name,createdAt:Date.now()};dirty=true;break;
@@ -51,9 +56,21 @@ export class IdentityMerges{
   const target=await this.sync.store.get('characters',r.targetId),source=await this.sync.store.get('characters',r.sourceId)||r.sourceBody;
   if(!target||target.deletedAt!=null||name(target.name)!==name(source.name)||this.canonical(source.id)!==source.id||this.canonical(target.id)!==target.id)throw Error('角色已经变化，请刷新后重新选择');
   if(!merge){this.s.nameChoices[r.choiceKey]=false;delete this.s.nameRequests[id];await this.sync.save();return;}
+    if(Object.values(this.s.devices).some(d=>d.groupMemberships?.some(ids=>ids.includes(source.id)&&ids.includes(target.id))))throw Error('这两个角色在手机的同一聊天室中，请选择分别保留');
   const writes=[],originals=[];const put=(kind,value)=>writes.push({kind,id:value.id,value});
   originals.push({kind:'characters',value:target},{kind:'characters',value:source});put('characters',settings(target,source));
-  for(const chat of await this.sync.store.list('chats'))if(chat.characterId===source.id){originals.push({kind:'chats',value:chat});put('chats',{...chat,characterId:target.id,characterName:target.name});}
+  for(const chat of await this.sync.store.list('chats'))if(hasParticipant(chat,source.id)){
+    if(isGroupChat(chat)&&hasParticipant(chat,target.id))throw Error('这两个角色已在同一电脑聊天室中，请选择分别保留，以保留发言身份');
+    originals.push({kind:'chats',value:chat});const next=structuredClone(chat);
+    if(next.characterId===source.id){next.characterId=target.id;next.characterName=target.name;}
+    if(isGroupChat(next)){
+      next.participants=next.participants.map(p=>p.characterId===source.id?{characterId:target.id,name:target.name}:p);
+      for(const m of next.messages)if(m.characterId===source.id)m.characterId=target.id;
+      if(next.pendingTurn)for(const k of ['characterIds','completedIds'])next.pendingTurn[k]=next.pendingTurn[k].map(id=>id===source.id?target.id:id);
+      delete next.summary;next.updatedAt=Math.max(Date.now(),next.updatedAt+1);
+    }
+    put('chats',next);
+  }
   const a=await this.sync.store.get('memories',target.id),b=await this.sync.store.get('memories',source.id);if(a||b){originals.push(...[a,b].filter(Boolean).map(value=>({kind:'memories',value})));put('memories',{...(a||b),id:target.id,characterId:target.id,records:mergeIdentityRecords(a?.records,b?.records,true)});}
   writes.push({kind:'memories',id:source.id,value:null},{kind:'characters',id:source.id,value:null});
   const plan={id:randomUUID(),request:r,writes,originals,target,source};const dir=join(this.sync.folder,'identity-merges');await mkdir(dir,{recursive:true});await writeFile(join(dir,plan.id+'.json'),JSON.stringify(plan),{flag:'wx',mode:0o600});

@@ -1,25 +1,13 @@
-# Muse Multi-Agent 0.3.0-lan.2
+# Muse Multi-Agent 0.3.0-chatrooms.1
 
-面向 Muse Cyrene 使用场景的非官方电脑端预发布版。与上游 Muse、DeepSeek 无官方隶属或背书关系。感谢 Muse 作者 Mozi 与贡献者，保留 GPL-3.0-or-later、LICENSE、NOTICE 和第三方声明。
+发行标签：`desktop-v0.3.0-chatrooms.1`，勾选 Pre-release。安装与验证范围见下文。
 
-## 新功能
+本版汇总自局域网版本以来的功能：2–8 角色聊天室、每角色记忆目录与聊天检索、QQ 图片交互、离线留言补回和经过预览确认的空间动态发布。手机公开文字聊天室同步需配套 Muse Cyrene 0.3.0-chatrooms.1。
 
-- 配套 Muse Cyrene 0.3.0-lan.2：首次选择二维码或 USB 配对，之后在同一局域网自动同步角色、文字聊天和事实记忆。
-- 同名但身份不同的 AI 先询问“合并”或“分别保留”。任一端作答，另一端沿用；分别保留记住选择。
-- 确认合并后统一角色身份、汇总聊天和记忆。电脑已有设定优先，差异保留副本，合并前保存原始备份；重复请求与中断恢复不会重复创建资料。
-- 可选 DSH 插件 0.3.6-alpha.1：逐角色授权使用当前及以后注册的会话工具，保留宿主审批与作用域；未注册模型工具的界面插件仍需适配。
-- 修正无效 API Key 被误报为网络连接失败的问题。
+安装 Node.js 24+，解压源码后双击 start-muse.cmd，或运行 npm start；无需 npm install。浏览器打开 http://127.0.0.1:3210/，填写自己的 API Key。更新前导出完整备份，在新目录启动并导入。DSH 与 NapCat 均为可选外部组件。
 
-## 使用
+源码不含 data、记忆资料、账号、密钥、DSH/NapCat 运行库、模型或音色。QQ 与 DSH 需在自己的环境配置。聊天室不调用 QQ/DSH，手机同步仅覆盖兼容的公开文字范围。详见 docs/CHAT_ROOMS.md、docs/QQ_CHANNEL.md、docs/LIMITATIONS.md。
 
-下载源码 ZIP，解压到可写目录，安装 Node.js 24+，Windows 双击 `start-muse.cmd`，其他系统在源码目录运行 `npm start`。访问 http://127.0.0.1:3210/ 并填写自己的模型密钥。基础应用无 npm 外部依赖。
+本次验证见 docs/VALIDATION.md。发布附件建议为源码 ZIP 和 SHA256SUMS.txt；本版没有独立 EXE。
 
-DSH 附件为可选插件，安装说明在 `plugin/README.md`。USB 配对需自行安装 Android Platform Tools，配置 PATH 或 MUSE_ADB_PATH；扫码不需要 ADB。升级前导出完整备份，使用新目录启动并恢复自己的备份。DSH 授权重启后需重新配对。
-
-## 验证与范围
-
-Windows / Node.js 24：81 项自动回归与干净目录安装检查通过；同名提示浏览器验证通过。配套手机真机 5 项隔离测试及 1 项 Wi-Fi 直连测试通过。没有声称全新 DSH、全部第三方插件、全部系统或全应用测试通过。
-
-这是本机网页应用源码发行版，不是独立 EXE。多角色群聊尚未实现；仅同步可移植文字资料，不跨端同步附件、API 密钥、DSH 授权或本地语音模型。后台同步受 Android 调度与网络隔离影响。具体范围见 docs/LAN_SYNC.md 和 docs/LIMITATIONS.md。
-
-源码与插件附件不包含个人角色、聊天、配对凭据、私钥、模型、音色或 DSH 运行库。本版为预发布，安装与已知范围以本说明和配套文档为准。
+保留 GPL-3.0-or-later、LICENSE、NOTICE 和第三方声明。本项目为非官方修改项目。

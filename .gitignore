@@ -13,3 +13,10 @@ backups/
 Thumbs.db
 
 dist/
+
+memory/
+*.jks
+*.keystore
+*.pem
+*.key
+*.db

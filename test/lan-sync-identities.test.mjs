@@ -10,6 +10,7 @@ import {character} from '../src/characters.mjs';
 import {LanSync} from '../src/lan-sync.mjs';
 import {createApp} from '../src/server.mjs';
 import {once} from 'node:events';
+import {createGroupChat} from '../src/group-chat.mjs';
 const change=(kind,body,baseRevision=0)=>({kind,id:body.id,opId:randomUUID(),baseRevision,body});
 const input=(changes=[],extra={})=>({cursor:0,changes,...extra});
 const fact=(text,id=randomUUID(),importance=1)=>({id,text,category:'preference',createdAt:1,importance});
@@ -68,4 +69,18 @@ test('电脑确认接口通过当前请求锁完成合并，重复确认幂等',
   const response=await fetch(url,packet);assert.equal(response.status,200);const state=await response.json();assert.equal(state.nameMatches.length,0);assert.equal(state.roleMerges[0].to,a.id);
   assert.equal((await fetch(url,packet)).status,200);assert.equal((await store.list('characters')).length,1);
  }finally{await new Promise(r=>server.close(r));}
+});
+
+test('电脑聊天室随角色身份合并更新非首位成员，但拒绝合并同室的两位成员',async t=>{
+ const {store,sync,device}=await fixture(t),a=character({name:'同名'}),b=character({name:'同名'}),c=character({name:'另一位'});
+ for(const role of [a,b,c])await store.put('characters',role);
+ const active=id=>store.get('characters',id),room=await createGroupChat({characterIds:[c.id,b.id]},active),userId=randomUUID();
+ room.messages=[{id:userId,role:'user',content:'你好',createdAt:1},{id:randomUUID(),role:'assistant',characterId:b.id,characterName:b.name,content:'你好呀',createdAt:2,turnUserMessageId:userId}];
+ room.pendingTurn={userMessageId:userId,characterIds:[b.id,c.id],completedIds:[b.id]};await store.put('chats',room);
+ const result=await sync.exchange(device,input([], {roleInventory:[{id:b.id,name:b.name}]}));await sync.resolveNameMatch(result.nameMatches[0].id,true);
+ const merged=await store.get('chats',room.id);assert.equal(merged.characterId,c.id);assert.equal(merged.participants[1].characterId,a.id);assert.equal(merged.messages[1].characterId,a.id);assert.deepEqual(merged.pendingTurn.completedIds,[a.id]);assert.equal(sync.state.rows['chats:'+room.id].body.participants[1].characterId,a.id);
+ const d=character({name:'同名'});await store.put('characters',d);await store.put('chats',await createGroupChat({characterIds:[a.id,d.id]},active));
+ const second=await sync.exchange(device,input([], {roleMergeVersion:1,roleInventory:[{id:d.id,name:d.name}]}));
+ await assert.rejects(sync.resolveNameMatch(second.nameMatches[0].id,true),/同一电脑聊天室/);assert.ok(await store.get('characters',d.id));assert.equal(sync.hasPendingIdentityMerge(),false);
+ await sync.resolveNameMatch(second.nameMatches[0].id,false);
 });
